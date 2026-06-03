@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useGame } from '../context/useGame';
 import { Jugador, Equipo, Formacion } from '../types';
-import { asignarRolesTacticos } from '../engine/matchEngine';
+import { asignarRolesTacticos, obtenerDebilidadEquipo } from '../engine/matchEngine';
 
 // Helper para formatear dinero similar al resto de la app
 const formatearMoneda = (valor: number): string => {
@@ -41,6 +41,14 @@ export const LiveMatchView: React.FC = () => {
   const [enJuego, setEnJuego] = useState<boolean>(true);
   const [ordenActiva, setOrdenActiva] = useState<'ataque' | 'presion' | 'retencion' | null>(null);
   const [velocidad, setVelocidad] = useState<number>(500); // Velocidad en ms por minuto (500: Normal, 150: Rápida, 40: Ultra)
+  
+  // --- ESTADOS DE CHARLAS Y GRITOS TÉCNICOS ---
+  const [charlaPreMatch, setCharlaPreMatch] = useState<'motivadora' | 'calmada' | 'tactica' | null>(null);
+  const [charlaEntretiempo, setCharlaEntretiempo] = useState<'exigente' | 'apoyo' | 'tactica' | null>(null);
+  const [mostrarModalPreMatch, setMostrarModalPreMatch] = useState<boolean>(true);
+  const [mostrarModalEntretiempo, setMostrarModalEntretiempo] = useState<boolean>(false);
+  const [gritoActivo, setGritoActivo] = useState<'alentar' | 'exigir' | 'tiempo' | null>(null);
+  const [gritoMinutoInicio, setGritoMinutoInicio] = useState<number>(0);
   
   // Cartel/Banner destacado para goles o lesiones
   const [eventoDestacado, setEventoDestacado] = useState<{ tipo: 'gol' | 'lesion' | 'tarjeta'; texto: string } | null>(null);
@@ -86,14 +94,156 @@ export const LiveMatchView: React.FC = () => {
   // Mensaje de inicio
   useEffect(() => {
     if (!unaVezInicial.current) {
-      setComentarios([
+      const initialComments = [
         `⚽ ¡Comienza la transmisión del partido! Los equipos saltan a la cancha del estadio ${local.estadio}. Asistencia: ${(local.capacidadEstadio * (0.85 + Math.random() * 0.15)).toFixed(0)} espectadores.`,
         `📋 Alineación ${local.nombreCorto}: ${onceLocal.map(j => `${j.nombre} (${j.posicion})`).join(', ')}.`,
         `📋 Alineación ${visitante.nombreCorto}: ${onceVisitante.map(j => `${j.nombre} (${j.posicion})`).join(', ')}.`
-      ]);
+      ];
+
+      // Verificar si el usuario tiene el bonus táctico
+      const debilidadRival = obtenerDebilidadEquipo(equipoRival.id, jugadores);
+      const usuarioUsaEstrategiaValida = equipoUsuario.estrategiaPases === 'Largos al espacio' && equipoUsuario.estrategiaCorner === 'Atacar el primer palo';
+      const usuarioTieneBonus = debilidadRival === 'centrales_lentos' && usuarioUsaEstrategiaValida;
+
+      if (usuarioTieneBonus) {
+        initialComments.push(
+          `🎯 [Analista] ¡Estrategia acertada! La lentitud de los centrales de ${equipoRival.nombreCorto} es explotada por nuestro estilo de pases largos y centros al primer palo (+20% efectividad).`
+        );
+      }
+
+      setComentarios(initialComments);
       unaVezInicial.current = true;
     }
-  }, [local, visitante]);
+  }, [local, visitante, jugadores, equipoUsuario, equipoRival]);
+
+  // --- AJUSTE DE ATRIBUTOS POR CHARLAS Y GRITOS TÉCNICOS ---
+  const ajustarAtributosPorDT = (
+    j: Jugador,
+    minutoRef: number,
+    customGrito?: 'alentar' | 'exigir' | 'tiempo' | null
+  ): Jugador['atributos'] => {
+    const isUsuario = j.idEquipo === equipoUsuario.id;
+    const baseAtributos = { ...j.atributos };
+    if (!isUsuario) return baseAtributos;
+
+    // 0. Aplicar Rol Táctico en el Vivo
+    const cat = j.posicion === 'POR' ? 'POR' : (['DFC', 'LD', 'LI'].includes(j.posicion) ? 'DEF' : (['MC', 'MCO'].includes(j.posicion) ? 'MED' : 'DEL'));
+    if (j.rolTactico) {
+      if (cat === 'DEL' && j.rolTactico === 'Hombre de Área') {
+        baseAtributos.remate = Math.min(20, baseAtributos.remate + 3);
+        baseAtributos.velocidad = Math.max(1, baseAtributos.velocidad - 3);
+      } else if (cat === 'DEL' && j.rolTactico === 'Delantero Avanzado') {
+        baseAtributos.velocidad = Math.min(20, baseAtributos.velocidad + 3);
+      } else if (cat === 'MED' && j.rolTactico === 'Pivote Defensivo') {
+        baseAtributos.defensa = Math.min(20, baseAtributos.defensa + 3);
+      } else if (cat === 'MED' && j.rolTactico === 'Organizador') {
+        baseAtributos.pase = Math.min(20, baseAtributos.pase + 3);
+        baseAtributos.vision = Math.min(20, baseAtributos.vision + 3);
+      }
+    }
+
+    // 0.5. Aplicar Enfoque Táctico Semanal del Club
+    if (equipoUsuario.enfoqueEntrenamiento === 'Táctico') {
+      baseAtributos.decisiones = Math.min(20, baseAtributos.decisiones + 2);
+      baseAtributos.posicionamiento = Math.min(20, baseAtributos.posicionamiento + 2);
+      baseAtributos.vision = Math.min(20, baseAtributos.vision + 2);
+      baseAtributos.determinacion = Math.min(20, baseAtributos.determinacion + 2);
+    }
+
+    // 1. Aplicar Charla Pre-Partido (minutos 0-45) o Charla Entretiempo (minutos 46-90)
+    if (minutoRef <= 45) {
+      if (charlaPreMatch === 'motivadora') {
+        if (['Ambicioso', 'Líder', 'Profesional'].includes(j.personalidad)) {
+          (Object.keys(baseAtributos) as (keyof typeof baseAtributos)[]).forEach(k => {
+            baseAtributos[k] = Math.max(1, Math.round(baseAtributos[k] * 1.10));
+          });
+        } else if (j.personalidad === 'Problemático') {
+          (Object.keys(baseAtributos) as (keyof typeof baseAtributos)[]).forEach(k => {
+            baseAtributos[k] = Math.max(1, Math.round(baseAtributos[k] * 0.90));
+          });
+        }
+      } else if (charlaPreMatch === 'calmada') {
+        if (j.moral < 60) {
+          baseAtributos.decisiones = Math.max(1, Math.round(baseAtributos.decisiones * 1.15));
+          baseAtributos.reflejos = Math.max(1, Math.round(baseAtributos.reflejos * 1.15));
+        }
+        if (j.personalidad === 'Ambicioso') {
+          (Object.keys(baseAtributos) as (keyof typeof baseAtributos)[]).forEach(k => {
+            baseAtributos[k] = Math.max(1, Math.round(baseAtributos[k] * 0.95));
+          });
+        }
+      } else if (charlaPreMatch === 'tactica') {
+        baseAtributos.posicionamiento = Math.max(1, Math.round(baseAtributos.posicionamiento * 1.10));
+        baseAtributos.decisiones = Math.max(1, Math.round(baseAtributos.decisiones * 1.10));
+        baseAtributos.pase = Math.max(1, Math.round(baseAtributos.pase * 1.10));
+      }
+    } else {
+      // Segunda mitad (minutos 46-90)
+      if (charlaEntretiempo === 'exigente') {
+        const vaGanando = esLocalUsuario ? golesLocal > golesVisitante : golesVisitante > golesLocal;
+        if (!vaGanando) {
+          if (['Ambicioso', 'Líder', 'Profesional'].includes(j.personalidad)) {
+            (Object.keys(baseAtributos) as (keyof typeof baseAtributos)[]).forEach(k => {
+              baseAtributos[k] = Math.max(1, Math.round(baseAtributos[k] * 1.15));
+            });
+          }
+          if (j.moral < 60 || j.personalidad === 'Problemático') {
+            baseAtributos.decisiones = Math.max(1, Math.round(baseAtributos.decisiones * 0.75));
+          }
+        } else {
+          (Object.keys(baseAtributos) as (keyof typeof baseAtributos)[]).forEach(k => {
+            baseAtributos[k] = Math.max(1, Math.round(baseAtributos[k] * 1.05));
+          });
+        }
+      } else if (charlaEntretiempo === 'apoyo') {
+        const mult = j.moral < 60 ? 1.15 : 1.10;
+        (Object.keys(baseAtributos) as (keyof typeof baseAtributos)[]).forEach(k => {
+          baseAtributos[k] = Math.max(1, Math.round(baseAtributos[k] * mult));
+        });
+      } else if (charlaEntretiempo === 'tactica') {
+        baseAtributos.posicionamiento = Math.max(1, Math.round(baseAtributos.posicionamiento * 1.10));
+        baseAtributos.defensa = Math.max(1, Math.round(baseAtributos.defensa * 1.10));
+        baseAtributos.pase = Math.max(1, Math.round(baseAtributos.pase * 1.10));
+      }
+    }
+
+    // 2. Aplicar Gritos en Vivo
+    const actualGrito = customGrito !== undefined ? customGrito : gritoActivo;
+    if (actualGrito) {
+      if (actualGrito === 'exigir') {
+        const tienePersonalidadExigente = ['Ambicioso', 'Líder', 'Profesional'].includes(j.personalidad) || j.atributos.determinacion >= 15;
+        if (tienePersonalidadExigente) {
+          baseAtributos.velocidad = Math.max(1, Math.round(baseAtributos.velocidad * 1.10));
+          baseAtributos.aceleracion = Math.max(1, Math.round(baseAtributos.aceleracion * 1.10));
+          baseAtributos.resistencia = Math.max(1, Math.round(baseAtributos.resistencia * 1.10));
+          baseAtributos.fuerza = Math.max(1, Math.round(baseAtributos.fuerza * 1.10));
+        }
+        const moralBajaOPersonaProblema = j.moral < 50 || j.personalidad === 'Problemático';
+        if (moralBajaOPersonaProblema) {
+          baseAtributos.decisiones = Math.max(1, Math.round(baseAtributos.decisiones * 0.70));
+        }
+      } else if (actualGrito === 'alentar') {
+        const esLealOMoralBaja = j.moral < 60 || j.personalidad === 'Leal';
+        if (esLealOMoralBaja) {
+          (Object.keys(baseAtributos) as (keyof typeof baseAtributos)[]).forEach(k => {
+            baseAtributos[k] = Math.max(1, Math.round(baseAtributos[k] * 1.10));
+          });
+        }
+        if (j.personalidad === 'Problemático') {
+          (Object.keys(baseAtributos) as (keyof typeof baseAtributos)[]).forEach(k => {
+            baseAtributos[k] = Math.max(1, Math.round(baseAtributos[k] * 0.95));
+          });
+        }
+      } else if (actualGrito === 'tiempo') {
+        baseAtributos.defensa = Math.max(1, Math.round(baseAtributos.defensa * 1.10));
+        baseAtributos.posicionamiento = Math.max(1, Math.round(baseAtributos.posicionamiento * 1.10));
+        baseAtributos.remate = Math.max(1, Math.round(baseAtributos.remate * 0.80));
+        baseAtributos.regate = Math.max(1, Math.round(baseAtributos.regate * 0.80));
+      }
+    }
+
+    return baseAtributos;
+  };
 
   // --- FUNCIÓN PARA SALTEAR LA SIMULACIÓN Y COMPUTAR EL RESULTADO INSTANTÁNEO ---
   const saltearSimulacion = () => {
@@ -109,6 +259,7 @@ export const LiveMatchView: React.FC = () => {
     let canchaActual = [...jugadoresEnCancha];
 
     // Simular los minutos restantes hasta el 90 de forma síncrona
+    let activeGrito = gritoActivo;
     while (mActual < 90) {
       mActual += 1;
 
@@ -117,6 +268,11 @@ export const LiveMatchView: React.FC = () => {
           `🏁 Minuto 90: ¡Final del partido! El árbitro pita el final. Marcador definitivo: ${local.nombre} ${gL} - ${gV} ${visitante.nombre}.`
         );
         break;
+      }
+
+      // Desvanecimiento del grito en simulación
+      if (activeGrito && mActual >= gritoMinutoInicio + 10) {
+        activeGrito = null;
       }
 
       // --- CÁLCULO DE VALORES DE ATAQUE Y DEFENSA ACTIVO CON PENALIZACIÓN DE POSICIÓN ---
@@ -131,7 +287,8 @@ export const LiveMatchView: React.FC = () => {
       const onceLAjustados = rolesL.map(r => {
         const j = r.jugador;
         const comp = r.compatibilidad;
-        const atributosAjustados = { ...j.atributos };
+        const dtAjustados = ajustarAtributosPorDT(j, mActual, activeGrito);
+        const atributosAjustados = { ...dtAjustados };
         for (const key of Object.keys(atributosAjustados) as (keyof typeof j.atributos)[]) {
           atributosAjustados[key] = Math.max(1, Math.round(atributosAjustados[key] * comp));
         }
@@ -141,7 +298,8 @@ export const LiveMatchView: React.FC = () => {
       const onceVAjustados = rolesV.map(r => {
         const j = r.jugador;
         const comp = r.compatibilidad;
-        const atributosAjustados = { ...j.atributos };
+        const dtAjustados = ajustarAtributosPorDT(j, mActual, activeGrito);
+        const atributosAjustados = { ...dtAjustados };
         for (const key of Object.keys(atributosAjustados) as (keyof typeof j.atributos)[]) {
           atributosAjustados[key] = Math.max(1, Math.round(atributosAjustados[key] * comp));
         }
@@ -170,6 +328,18 @@ export const LiveMatchView: React.FC = () => {
 
       if (visitante.estiloJuego === 'Ofensivo') { atkV *= 1.15; defV *= 0.90; }
       else if (visitante.estiloJuego === 'Defensivo') { atkV *= 0.90; defV *= 1.15; }
+
+      // Bonus de Balón Parado y Scouting del Rival
+      const debilidadLocalOpp = obtenerDebilidadEquipo(visitante.id, jugadores);
+      const localUsaEstrategiaValida = local.estrategiaPases === 'Largos al espacio' && local.estrategiaCorner === 'Atacar el primer palo';
+      const localTieneBonus = debilidadLocalOpp === 'centrales_lentos' && localUsaEstrategiaValida;
+
+      const debilidadVisitanteOpp = obtenerDebilidadEquipo(local.id, jugadores);
+      const visitanteUsaEstrategiaValida = visitante.estrategiaPases === 'Largos al espacio' && visitante.estrategiaCorner === 'Atacar el primer palo';
+      const visitanteTieneBonus = debilidadVisitanteOpp === 'centrales_lentos' && visitanteUsaEstrategiaValida;
+
+      if (localTieneBonus) atkL *= 1.20;
+      if (visitanteTieneBonus) atkV *= 1.20;
 
       // Modificadores de Órdenes Rápidas (Usuario)
       if (ordenActiva && esLocalUsuario) {
@@ -309,8 +479,9 @@ export const LiveMatchView: React.FC = () => {
   };
 
   // --- BUCLE PRINCIPAL DEL PARTIDO ---
+  // --- BUCLE PRINCIPAL DEL PARTIDO ---
   useEffect(() => {
-    if (!enJuego || modalSustituciones) return;
+    if (!enJuego || modalSustituciones || mostrarModalPreMatch || mostrarModalEntretiempo) return;
 
     const tick = setInterval(() => {
       if (pausadoPorEvento.current) return;
@@ -318,6 +489,13 @@ export const LiveMatchView: React.FC = () => {
       setMinuto(prevMin => {
         const nuevoMin = prevMin + 1;
         
+        // Pausar en el entretiempo
+        if (nuevoMin === 45) {
+          setMostrarModalEntretiempo(true);
+          clearInterval(tick);
+          return 45;
+        }
+
         if (nuevoMin >= 90) {
           setEnJuego(false);
           setComentarios(prev => [
@@ -326,6 +504,15 @@ export const LiveMatchView: React.FC = () => {
           ]);
           clearInterval(tick);
           return 90;
+        }
+
+        // Desvanecimiento del grito activo
+        if (gritoActivo && nuevoMin >= gritoMinutoInicio + 10) {
+          setGritoActivo(null);
+          setComentarios(prev => [
+            `📢 [Instrucciones] Termina el efecto del grito del DT. Los jugadores regresan a su concentración habitual.`,
+            ...prev
+          ]);
         }
 
         // --- CÁLCULO DE VALORES DE ATAQUE Y DEFENSA ACTIVO CON PENALIZACIÓN DE POSICIÓN ---
@@ -338,7 +525,8 @@ export const LiveMatchView: React.FC = () => {
         const onceLAjustados = rolesL.map(r => {
           const j = r.jugador;
           const comp = r.compatibilidad;
-          const atributosAjustados = { ...j.atributos };
+          const dtAjustados = ajustarAtributosPorDT(j, nuevoMin);
+          const atributosAjustados = { ...dtAjustados };
           for (const key of Object.keys(atributosAjustados) as (keyof typeof j.atributos)[]) {
             atributosAjustados[key] = Math.max(1, Math.round(atributosAjustados[key] * comp));
           }
@@ -348,7 +536,8 @@ export const LiveMatchView: React.FC = () => {
         const onceVAjustados = rolesV.map(r => {
           const j = r.jugador;
           const comp = r.compatibilidad;
-          const atributosAjustados = { ...j.atributos };
+          const dtAjustados = ajustarAtributosPorDT(j, nuevoMin);
+          const atributosAjustados = { ...dtAjustados };
           for (const key of Object.keys(atributosAjustados) as (keyof typeof j.atributos)[]) {
             atributosAjustados[key] = Math.max(1, Math.round(atributosAjustados[key] * comp));
           }
@@ -377,6 +566,18 @@ export const LiveMatchView: React.FC = () => {
 
         if (visitante.estiloJuego === 'Ofensivo') { atkV *= 1.15; defV *= 0.90; }
         else if (visitante.estiloJuego === 'Defensivo') { atkV *= 0.90; defV *= 1.15; }
+
+        // Bonus de Balón Parado y Scouting del Rival
+        const debilidadLocalOpp = obtenerDebilidadEquipo(visitante.id, jugadores);
+        const localUsaEstrategiaValida = local.estrategiaPases === 'Largos al espacio' && local.estrategiaCorner === 'Atacar el primer palo';
+        const localTieneBonus = debilidadLocalOpp === 'centrales_lentos' && localUsaEstrategiaValida;
+
+        const debilidadVisitanteOpp = obtenerDebilidadEquipo(local.id, jugadores);
+        const visitanteUsaEstrategiaValida = visitante.estrategiaPases === 'Largos al espacio' && visitante.estrategiaCorner === 'Atacar el primer palo';
+        const visitanteTieneBonus = debilidadVisitanteOpp === 'centrales_lentos' && visitanteUsaEstrategiaValida;
+
+        if (localTieneBonus) atkL *= 1.20;
+        if (visitanteTieneBonus) atkV *= 1.20;
 
         // Modificadores de Órdenes Rápidas (Usuario)
         if (ordenActiva && esLocalUsuario) {
@@ -524,7 +725,7 @@ export const LiveMatchView: React.FC = () => {
     }, velocidad); // 500ms por minuto
 
     return () => clearInterval(tick);
-  }, [enJuego, modalSustituciones, jugadoresEnCancha, ordenActiva, golesLocal, golesVisitante, velocidad]);
+  }, [enJuego, modalSustituciones, jugadoresEnCancha, ordenActiva, golesLocal, golesVisitante, velocidad, mostrarModalPreMatch, mostrarModalEntretiempo, gritoActivo, gritoMinutoInicio]);
 
   // --- FUNCIÓN DE CONTROL DE EVENTO DESTACADO CON PAUSA ---
   const lanzarEventoDestacado = (tipo: 'gol' | 'lesion' | 'tarjeta', texto: string) => {
@@ -799,6 +1000,87 @@ export const LiveMatchView: React.FC = () => {
             </div>
           </div>
 
+          {/* Gritos desde el Banco */}
+          <div className="bg-slate-900/60 backdrop-blur-md rounded-2xl border border-slate-800 p-5 space-y-4">
+            <h4 className="text-xs font-extrabold text-slate-400 uppercase tracking-wider border-b border-slate-850 pb-2">
+              🗣️ Gritos desde el Banco
+            </h4>
+
+            {gritoActivo && (
+              <div className="bg-teal-500/10 border border-teal-500/30 rounded-xl p-3 flex flex-col items-center justify-center animate-pulse">
+                <span className="text-[10px] text-teal-400 font-extrabold uppercase tracking-wider">Grito Activo:</span>
+                <span className="text-xs text-white font-black uppercase mt-0.5">
+                  {gritoActivo === 'alentar' ? '📢 Alentar' : gritoActivo === 'exigir' ? '📢 Exigir más' : '📢 Hacer tiempo'}
+                </span>
+                <span className="text-[9px] text-slate-400 mt-1 font-mono">
+                  Expira en: {gritoMinutoInicio + 10 - minuto} min
+                </span>
+              </div>
+            )}
+
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={() => {
+                  setGritoActivo('alentar');
+                  setGritoMinutoInicio(minuto);
+                  setComentarios(prev => [`📢 [Instrucciones] El DT grita desde la línea: "¡Alienten, con fe, sigan buscando el arco rival!"`, ...prev]);
+                }}
+                disabled={!enJuego || gritoActivo !== null}
+                className={`w-full py-2.5 px-3 rounded-xl border text-left transition-all duration-200 flex flex-col justify-center ${
+                  gritoActivo === 'alentar'
+                    ? 'bg-gradient-to-r from-cyan-600 to-blue-700 text-white border-cyan-500'
+                    : 'bg-slate-950/50 border-slate-850 hover:bg-slate-950 text-slate-350 disabled:opacity-40'
+                }`}
+              >
+                <div className="flex items-center justify-between w-full">
+                  <span className="font-extrabold text-[11px]">Alentar</span>
+                  <span>📢</span>
+                </div>
+                <span className="text-[8px] text-slate-400 mt-0.5">Moral +10% | Problemáticos -5%</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setGritoActivo('exigir');
+                  setGritoMinutoInicio(minuto);
+                  setComentarios(prev => [`📢 [Instrucciones] El DT se levanta enfurecido: "¡Exijo más concentración, pongan actitud!"`, ...prev]);
+                }}
+                disabled={!enJuego || gritoActivo !== null}
+                className={`w-full py-2.5 px-3 rounded-xl border text-left transition-all duration-200 flex flex-col justify-center ${
+                  gritoActivo === 'exigir'
+                    ? 'bg-gradient-to-r from-red-650 to-orange-700 text-white border-red-500'
+                    : 'bg-slate-950/50 border-slate-850 hover:bg-slate-950 text-slate-350 disabled:opacity-40'
+                }`}
+              >
+                <div className="flex items-center justify-between w-full">
+                  <span className="font-extrabold text-[11px]">Exigir más</span>
+                  <span>🔥</span>
+                </div>
+                <span className="text-[8px] text-slate-400 mt-0.5">Físicos +10% (Cracks) | Decisiones -30% (Nerviosos)</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setGritoActivo('tiempo');
+                  setGritoMinutoInicio(minuto);
+                  setComentarios(prev => [`📢 [Instrucciones] El DT gesticula con las manos hacia abajo: "¡Tranquilos, toquen y hagan correr el reloj!"`, ...prev]);
+                }}
+                disabled={!enJuego || gritoActivo !== null}
+                className={`w-full py-2.5 px-3 rounded-xl border text-left transition-all duration-200 flex flex-col justify-center ${
+                  gritoActivo === 'tiempo'
+                    ? 'bg-gradient-to-r from-emerald-600 to-teal-700 text-white border-emerald-500'
+                    : 'bg-slate-950/50 border-slate-850 hover:bg-slate-950 text-slate-350 disabled:opacity-40'
+                }`}
+              >
+                <div className="flex items-center justify-between w-full">
+                  <span className="font-extrabold text-[11px]">Hacer tiempo</span>
+                  <span>⏳</span>
+                </div>
+                <span className="text-[8px] text-slate-400 mt-0.5">Defensa +10% | Remate y Regate -20%</span>
+              </button>
+            </div>
+          </div>
+
           {/* Controles de Simulación */}
           <div className="bg-slate-900/60 backdrop-blur-md rounded-2xl border border-slate-800 p-5 space-y-4">
             <h4 className="text-xs font-extrabold text-slate-400 uppercase tracking-wider border-b border-slate-850 pb-2">
@@ -988,6 +1270,227 @@ export const LiveMatchView: React.FC = () => {
                   Confirmar Sustitución
                 </button>
               </div>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* ==========================================
+          MODAL DE CHARLA PRE-PARTIDO
+          ========================================== */}
+      {mostrarModalPreMatch && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md overflow-y-auto animate-fade-in">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col my-8 border-t-4 border-t-teal-500 animate-scale-in">
+            
+            {/* Header del Modal */}
+            <div className="p-6 bg-slate-950 border-b border-slate-800 text-center">
+              <span className="text-[10px] uppercase font-bold text-teal-400 tracking-widest block mb-1">
+                🗣️ Charla Técnica Inicial
+              </span>
+              <h3 className="text-2xl font-black text-white">
+                Antes del Partido
+              </h3>
+              <p className="text-xs text-slate-400 mt-1">
+                Dirígete a tu equipo en el vestuario. Tu charla influirá en el rendimiento de los jugadores durante el primer tiempo.
+              </p>
+            </div>
+
+            {/* Opciones */}
+            <div className="p-6 space-y-4">
+              <button
+                onClick={() => {
+                  setCharlaPreMatch('motivadora');
+                  setComentarios(prev => [
+                    `📢 [DT - Charla Pre-Partido] Motivadora: "¡Exijo garra, coraje y concentración total! ¡Somos el ${equipoUsuario.nombre} y hoy tenemos que ganar!"`,
+                    ...prev
+                  ]);
+                  setMostrarModalPreMatch(false);
+                }}
+                className="w-full text-left p-4 rounded-xl border border-slate-800 bg-slate-950/40 hover:bg-slate-950 hover:border-teal-500/55 transition-all duration-200 group flex gap-4 items-start"
+              >
+                <div className="p-3 bg-red-500/10 border border-red-500/20 text-red-400 rounded-xl text-xl">
+                  🔥
+                </div>
+                <div className="flex-1">
+                  <div className="font-extrabold text-sm text-slate-100 group-hover:text-teal-400 transition-colors">
+                    Charla Motivadora (Agresiva)
+                  </div>
+                  <div className="text-xs italic text-slate-400 mt-1">
+                    "¡Exijo garra, coraje y concentración total! ¡Somos el {equipoUsuario.nombre} y hoy tenemos que ganar!"
+                  </div>
+                  <div className="text-[10px] text-slate-500 mt-2 font-medium">
+                    Efecto: +10% atributos para Ambiciosos, Líderes y Profesionales. -10% para Problemáticos.
+                  </div>
+                </div>
+              </button>
+
+              <button
+                onClick={() => {
+                  setCharlaPreMatch('calmada');
+                  setComentarios(prev => [
+                    `📢 [DT - Charla Pre-Partido] Calmada: "Jueguen tranquilos, disfruten del partido y jueguen sin presión. Confío en ustedes."`,
+                    ...prev
+                  ]);
+                  setMostrarModalPreMatch(false);
+                }}
+                className="w-full text-left p-4 rounded-xl border border-slate-800 bg-slate-950/40 hover:bg-slate-950 hover:border-teal-500/55 transition-all duration-200 group flex gap-4 items-start"
+              >
+                <div className="p-3 bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 rounded-xl text-xl">
+                  🧘
+                </div>
+                <div className="flex-1">
+                  <div className="font-extrabold text-sm text-slate-100 group-hover:text-teal-400 transition-colors">
+                    Charla Calmada
+                  </div>
+                  <div className="text-xs italic text-slate-400 mt-1">
+                    "Jueguen tranquilos, disfruten del partido y jueguen sin presión. Confío en ustedes."
+                  </div>
+                  <div className="text-[10px] text-slate-500 mt-2 font-medium">
+                    Efecto: +15% a decisiones y reflejos para jugadores con moral baja (&lt; 60). -5% para Ambiciosos.
+                  </div>
+                </div>
+              </button>
+
+              <button
+                onClick={() => {
+                  setCharlaPreMatch('tactica');
+                  setComentarios(prev => [
+                    `📢 [DT - Charla Pre-Partido] Táctica: "Mantengan el bloque defensivo compacto y exploten las bandas."`,
+                    ...prev
+                  ]);
+                  setMostrarModalPreMatch(false);
+                }}
+                className="w-full text-left p-4 rounded-xl border border-slate-800 bg-slate-950/40 hover:bg-slate-950 hover:border-teal-500/55 transition-all duration-200 group flex gap-4 items-start"
+              >
+                <div className="p-3 bg-teal-500/10 border border-teal-500/20 text-teal-400 rounded-xl text-xl">
+                  📋
+                </div>
+                <div className="flex-1">
+                  <div className="font-extrabold text-sm text-slate-100 group-hover:text-teal-400 transition-colors">
+                    Charla Táctica
+                  </div>
+                  <div className="text-xs italic text-slate-400 mt-1">
+                    "Mantengan el bloque defensivo compacto y exploten las bandas."
+                  </div>
+                  <div className="text-[10px] text-slate-500 mt-2 font-medium">
+                    Efecto: +10% a posicionamiento, decisiones y pase para todo el plantel.
+                  </div>
+                </div>
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* ==========================================
+          MODAL DE CHARLA DE ENTRETIEMPO
+          ========================================== */}
+      {mostrarModalEntretiempo && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md overflow-y-auto animate-fade-in">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col my-8 border-t-4 border-t-amber-500 animate-scale-in">
+            
+            {/* Header del Modal */}
+            <div className="p-6 bg-slate-950 border-b border-slate-800 text-center">
+              <span className="text-[10px] uppercase font-bold text-amber-400 tracking-widest block mb-1">
+                ⏸️ Entretiempo y Ajustes
+              </span>
+              <h3 className="text-2xl font-black text-white">
+                Charla Técnica de Entretiempo
+              </h3>
+              <div className="mt-2 inline-flex items-center gap-3 bg-slate-900 px-4 py-1.5 rounded-full border border-slate-800">
+                <span className="text-xs font-bold text-slate-350">{local.nombreCorto}</span>
+                <span className="font-mono text-sm font-bold text-amber-400">{golesLocal} - {golesVisitante}</span>
+                <span className="text-xs font-bold text-slate-355">{visitante.nombreCorto}</span>
+              </div>
+              <p className="text-xs text-slate-400 mt-3">
+                Es hora de ajustar el rumbo para los segundos 45 minutos. ¿Qué les dirás a tus jugadores?
+              </p>
+            </div>
+
+            {/* Opciones */}
+            <div className="p-6 space-y-4">
+              <button
+                onClick={() => {
+                  setCharlaEntretiempo('exigente');
+                  setComentarios(prev => [
+                    `📢 [DT - Charla Entretiempo] Exigencia: "¡Esta actitud es inaceptable! ¡Exijo mucho más esfuerzo en el segundo tiempo!"`,
+                    ...prev
+                  ]);
+                  setMostrarModalEntretiempo(false);
+                }}
+                className="w-full text-left p-4 rounded-xl border border-slate-800 bg-slate-950/40 hover:bg-slate-950 hover:border-amber-500/55 transition-all duration-200 group flex gap-4 items-start"
+              >
+                <div className="p-3 bg-red-500/10 border border-red-500/20 text-red-400 rounded-xl text-xl">
+                  ⚡
+                </div>
+                <div className="flex-1">
+                  <div className="font-extrabold text-sm text-slate-100 group-hover:text-amber-400 transition-colors">
+                    Charla de Exigencia (Agresiva)
+                  </div>
+                  <div className="text-xs italic text-slate-400 mt-1">
+                    "¡Esta actitud es inaceptable! ¡Exijo mucho más esfuerzo en el segundo tiempo!"
+                  </div>
+                  <div className="text-[10px] text-slate-500 mt-2 font-medium">
+                    Efecto si no vas ganando: +15% atributos a Ambiciosos, Líderes y Profesionales. -25% decisiones para moral baja o Problemáticos. Si vas ganando: +5% general.
+                  </div>
+                </div>
+              </button>
+
+              <button
+                onClick={() => {
+                  setCharlaEntretiempo('apoyo');
+                  setComentarios(prev => [
+                    `📢 [DT - Charla Entretiempo] Apoyo: "Lo están haciendo bien, sigan con paciencia y llegará el gol. Confío en ustedes."`,
+                    ...prev
+                  ]);
+                  setMostrarModalEntretiempo(false);
+                }}
+                className="w-full text-left p-4 rounded-xl border border-slate-800 bg-slate-950/40 hover:bg-slate-950 hover:border-amber-500/55 transition-all duration-200 group flex gap-4 items-start"
+              >
+                <div className="p-3 bg-teal-500/10 border border-teal-500/20 text-teal-400 rounded-xl text-xl">
+                  🤝
+                </div>
+                <div className="flex-1">
+                  <div className="font-extrabold text-sm text-slate-100 group-hover:text-amber-400 transition-colors">
+                    Charla de Apoyo
+                  </div>
+                  <div className="text-xs italic text-slate-400 mt-1">
+                    "Lo están haciendo bien, sigan con paciencia y llegará el gol. Confío en ustedes."
+                  </div>
+                  <div className="text-[10px] text-slate-500 mt-2 font-medium">
+                    Efecto: +10% general a todo el equipo (+15% si la moral es baja &lt; 60).
+                  </div>
+                </div>
+              </button>
+
+              <button
+                onClick={() => {
+                  setCharlaEntretiempo('tactica');
+                  setComentarios(prev => [
+                    `📢 [DT - Charla Entretiempo] Táctica: "Ajustemos la presión en el mediocampo y juguemos con más circulación rápida."`,
+                    ...prev
+                  ]);
+                  setMostrarModalEntretiempo(false);
+                }}
+                className="w-full text-left p-4 rounded-xl border border-slate-800 bg-slate-950/40 hover:bg-slate-950 hover:border-amber-500/55 transition-all duration-200 group flex gap-4 items-start"
+              >
+                <div className="p-3 bg-amber-500/10 border border-amber-500/20 text-amber-400 rounded-xl text-xl">
+                  📋
+                </div>
+                <div className="flex-1">
+                  <div className="font-extrabold text-sm text-slate-100 group-hover:text-amber-400 transition-colors">
+                    Charla Táctica
+                  </div>
+                  <div className="text-xs italic text-slate-400 mt-1">
+                    "Ajustemos la presión en el mediocampo y juguemos con más circulación rápida."
+                  </div>
+                  <div className="text-[10px] text-slate-500 mt-2 font-medium">
+                    Efecto: +10% a posicionamiento, defensa y pase general de todo el plantel.
+                  </div>
+                </div>
+              </button>
             </div>
 
           </div>

@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useGame } from '../context/useGame';
-import { Jugador } from '../types';
+import { Jugador, PromesaGestion } from '../types';
 import { CriterioOrden, DireccionOrden, ordenarJugadores } from '../utils/sorting';
 
 // Formateador de dinero
@@ -27,6 +27,7 @@ export const MercadoView: React.FC = () => {
     aceptado: boolean;
     mensaje: string;
   } | null>(null);
+  const [promesaExigida, setPromesaExigida] = useState<PromesaGestion | null>(null);
 
   if (!equipoUsuario) return null;
 
@@ -63,6 +64,25 @@ export const MercadoView: React.FC = () => {
     setJugadorAOfrecer(jugador);
     setOfertaValor(jugador.valorMercado); // Inicializar oferta en su valor de mercado actual
     setFeedbackNegociacion(null);
+
+    // Generar promesa si es un jugador top (ca >= 80)
+    if (jugador.ca >= 80) {
+      const tiposPromesa = [
+        { tipo: 'penales', desc: 'Exige ser el pateador principal de penales' },
+        { tipo: 'copa_internacional', desc: 'Exige que el equipo clasifique a la copa internacional esta temporada' },
+        { tipo: 'titular_indiscutido', desc: 'Exige ser Titular Indiscutido' }
+      ];
+      const elegida = tiposPromesa[Math.floor(Math.random() * tiposPromesa.length)];
+      setPromesaExigida({
+        id: `promesa-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        descripcion: elegida.desc,
+        tipo: elegida.tipo as 'penales' | 'copa_internacional' | 'titular_indiscutido',
+        estado: 'En proceso',
+        partidosTranscurridos: 0
+      });
+    } else {
+      setPromesaExigida(null);
+    }
   };
 
   // Ejecutar negociación de oferta
@@ -70,7 +90,7 @@ export const MercadoView: React.FC = () => {
     e.preventDefault();
     if (!jugadorAOfrecer) return;
 
-    const res = comprarJugador(jugadorAOfrecer.id, ofertaValor);
+    const res = comprarJugador(jugadorAOfrecer.id, ofertaValor, promesaExigida);
     setFeedbackNegociacion(res);
   };
 
@@ -333,6 +353,20 @@ export const MercadoView: React.FC = () => {
               ) : (
                 /* Formulario de envío */
                 <form onSubmit={enviarOferta} className="space-y-4">
+                  {promesaExigida && (
+                    <div className="p-3.5 bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs rounded-xl space-y-1">
+                      <div className="font-bold flex items-center gap-1.5 uppercase tracking-wide text-[10px]">
+                        <span>⚠️</span> Exigencia de Promesa
+                      </div>
+                      <p className="text-[11px] leading-relaxed">
+                        Este jugador exige la siguiente promesa de gestión para firmar su contrato:
+                      </p>
+                      <div className="bg-slate-950/60 p-2 rounded-lg border border-slate-800 text-slate-100 font-semibold italic mt-1 text-[11px]">
+                        "{promesaExigida.descripcion}"
+                      </div>
+                    </div>
+                  )}
+
                   {equipoUsuario.presupuestoFichajes <= 0 ? (
                     <div className="p-3 bg-rose-500/10 border border-rose-500/25 text-rose-400 text-xs rounded-lg">
                       ⚠️ <strong>Sin fondos:</strong> Tu presupuesto de fichajes es de 0€. Fichajes imposibles en este momento.

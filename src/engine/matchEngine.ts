@@ -71,6 +71,57 @@ export const obtenerCategoriaPosicion = (pos: Posicion): string => {
   return 'DEL'; // ED, EI, DC
 };
 
+export function obtenerDebilidadEquipo(
+  equipoId: string,
+  todosJugadores: Jugador[]
+): 'centrales_lentos' | 'debilidad_aerea' | 'laterales_proyectados' {
+  const deEquipo = todosJugadores.filter(j => j.idEquipo === equipoId);
+  const dfcs = deEquipo.filter(j => j.posicion === 'DFC');
+  if (dfcs.length > 0) {
+    const avgVel = dfcs.reduce((acc, j) => acc + j.atributos.velocidad, 0) / dfcs.length;
+    const avgFuerza = dfcs.reduce((acc, j) => acc + j.atributos.fuerza, 0) / dfcs.length;
+    if (avgVel < 12) {
+      return 'centrales_lentos';
+    } else if (avgFuerza < 12) {
+      return 'debilidad_aerea';
+    }
+  }
+  return 'laterales_proyectados';
+}
+
+export function aplicarRolYEntrenamiento(
+  j: Jugador,
+  equipo: Equipo
+): AtributosJugador {
+  const attrs = { ...j.atributos };
+
+  // 1. Roles Tácticos (solo si está en su posición natural o compatible)
+  const cat = obtenerCategoriaPosicion(j.posicion);
+  if (j.rolTactico) {
+    if (cat === 'DEL' && j.rolTactico === 'Hombre de Área') {
+      attrs.remate = Math.min(20, attrs.remate + 3);
+      attrs.velocidad = Math.max(1, attrs.velocidad - 3);
+    } else if (cat === 'DEL' && j.rolTactico === 'Delantero Avanzado') {
+      attrs.velocidad = Math.min(20, attrs.velocidad + 3);
+    } else if (cat === 'MED' && j.rolTactico === 'Pivote Defensivo') {
+      attrs.defensa = Math.min(20, attrs.defensa + 3);
+    } else if (cat === 'MED' && j.rolTactico === 'Organizador') {
+      attrs.pase = Math.min(20, attrs.pase + 3);
+      attrs.vision = Math.min(20, attrs.vision + 3);
+    }
+  }
+
+  // 2. Enfoque Táctico de Entrenamiento (boost mental de +2)
+  if (equipo.enfoqueEntrenamiento === 'Táctico') {
+    attrs.decisiones = Math.min(20, attrs.decisiones + 2);
+    attrs.posicionamiento = Math.min(20, attrs.posicionamiento + 2);
+    attrs.vision = Math.min(20, attrs.vision + 2);
+    attrs.determinacion = Math.min(20, attrs.determinacion + 2);
+  }
+
+  return attrs;
+}
+
 export function calcularCompatibilidadPosicion(natural: Posicion, asignada: Posicion): number {
   if (natural === asignada) return 1.0;
   
@@ -240,7 +291,8 @@ export function simularPartido(local: Equipo, visitante: Equipo, jugadores: Juga
   const localAjustados = rolesLocal.map(r => {
     const j = r.jugador;
     const comp = r.compatibilidad;
-    const atributosAjustados = { ...j.atributos };
+    const baseAttrs = aplicarRolYEntrenamiento(j, local);
+    const atributosAjustados = { ...baseAttrs };
     for (const key of Object.keys(atributosAjustados) as (keyof AtributosJugador)[]) {
       atributosAjustados[key] = Math.max(1, Math.round(atributosAjustados[key] * comp));
     }
@@ -250,7 +302,8 @@ export function simularPartido(local: Equipo, visitante: Equipo, jugadores: Juga
   const visitanteAjustados = rolesVisitante.map(r => {
     const j = r.jugador;
     const comp = r.compatibilidad;
-    const atributosAjustados = { ...j.atributos };
+    const baseAttrs = aplicarRolYEntrenamiento(j, visitante);
+    const atributosAjustados = { ...baseAttrs };
     for (const key of Object.keys(atributosAjustados) as (keyof AtributosJugador)[]) {
       atributosAjustados[key] = Math.max(1, Math.round(atributosAjustados[key] * comp));
     }
@@ -295,6 +348,22 @@ export function simularPartido(local: Equipo, visitante: Equipo, jugadores: Juga
   } else if (estiloVisitante === 'Defensivo') {
     ataqueVisitante *= 0.90;
     defensaVisitante *= 1.15;
+  }
+
+  // 2.6 APLICAR BONUS DE BALÓN PARADO Y SCOUTING DEL RIVAL
+  const debilidadLocalOpp = obtenerDebilidadEquipo(visitante.id, jugadores);
+  const localUsaEstrategiaValida = local.estrategiaPases === 'Largos al espacio' && local.estrategiaCorner === 'Atacar el primer palo';
+  const localTieneBonus = debilidadLocalOpp === 'centrales_lentos' && localUsaEstrategiaValida;
+
+  const debilidadVisitanteOpp = obtenerDebilidadEquipo(local.id, jugadores);
+  const visitanteUsaEstrategiaValida = visitante.estrategiaPases === 'Largos al espacio' && visitante.estrategiaCorner === 'Atacar el primer palo';
+  const visitanteTieneBonus = debilidadVisitanteOpp === 'centrales_lentos' && visitanteUsaEstrategiaValida;
+
+  if (localTieneBonus) {
+    ataqueLocal *= 1.20;
+  }
+  if (visitanteTieneBonus) {
+    ataqueVisitante *= 1.20;
   }
 
   // 3. GENERAR ENTRE 2 Y 3 CHANCES DE GOL (más realista, partidos menos prolíficos)

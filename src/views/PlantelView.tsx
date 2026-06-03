@@ -452,6 +452,29 @@ export const PlantelView: React.FC = () => {
                 </div>
               </div>
 
+              {/* Promesas de Gestión */}
+              {jugadorSeleccionado.promesas && jugadorSeleccionado.promesas.length > 0 && (
+                <div className="p-4 bg-slate-950 border-t border-slate-800 space-y-2">
+                  <h4 className="text-[9px] font-extrabold text-slate-500 uppercase tracking-widest pb-1 flex items-center gap-1.5 border-b border-slate-800/60 pb-1.5">
+                    <span>🤝</span> Promesas de Gestión
+                  </h4>
+                  <div className="space-y-2">
+                    {jugadorSeleccionado.promesas.map((promesa, idx) => (
+                      <div key={idx} className="flex justify-between items-center bg-slate-900/40 p-2.5 rounded-xl border border-slate-850 text-[11px] gap-4">
+                        <span className="text-slate-300 font-semibold">{promesa.descripcion}</span>
+                        <span className={`text-[9px] font-bold px-2.5 py-0.5 rounded-full select-none ${
+                          promesa.estado === 'Cumplida' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
+                          promesa.estado === 'Incumplida' ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20 animate-pulse' :
+                          'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                        }`}>
+                          {promesa.estado}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Botón de Acción Prominente */}
               <div className="p-4 bg-slate-900 border-t border-slate-800/80">
                 <button

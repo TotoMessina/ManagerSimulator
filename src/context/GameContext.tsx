@@ -1,6 +1,6 @@
 // @refresh reset
 import React, { createContext, useContext, useState, ReactNode, useCallback } from 'react';
-import { Equipo, Jugador, Liga, TablaEquipo, Jornada, Formacion, EstiloJuego, OpcionPrensa, RuedaPrensa, OfertaRecibida, Posicion, PersonalidadJugador, CharlaJugador, AcademiaReporte, CopaCampeones, TablaCopa, PartidoCopa, GrupoCopa } from '../types';
+import { Equipo, Jugador, Liga, TablaEquipo, Jornada, Formacion, EstiloJuego, OpcionPrensa, RuedaPrensa, OfertaRecibida, Posicion, PersonalidadJugador, CharlaJugador, AcademiaReporte, CopaCampeones, TablaCopa, PartidoCopa, GrupoCopa, AtributosJugador, PromesaGestion, EventoVestuario, OpcionEvento, JugadorAgente } from '../types';
 import { equiposIniciales, jugadoresIniciales, ligaInicial, fixtureInicial, generarNewgen, generarFixtureRoundRobin, equiposLaLiga, equiposPremier, equiposSerieA, equiposBundesliga, randomRange } from '../data/initialData';
 import { simularPartido } from '../engine/matchEngine';
 
@@ -29,9 +29,14 @@ export interface GameContextProps {
   ofertaRecibidaActiva: OfertaRecibida | null;
   fixture: Jornada[];
   reporteAcademia: AcademiaReporte | null;
-  partidoEnVivo: { local: Equipo; visitante: Equipo; jornada: Jornada; tipo?: 'liga' | 'copa'; grupoId?: string; partidoId?: string } | null;
+  partidoEnVivo: { local: Equipo; visitante: Equipo; jornada: Jornada; tipo?: 'liga' | 'copa'; grupoId?: string; partidoId?: string; subtipo?: 'champions' | 'europa' } | null;
   charlaActiva: CharlaJugador | null;
   copaCampeones: CopaCampeones | null;
+  copaEuropa: CopaCampeones | null;
+  eventoActivo: EventoVestuario | null;
+  deadlineDayActivo: boolean;
+  horasDeadline: number;
+  jugadoresAgentes: JugadorAgente[];
   
   // Acciones / Modificadores del Estado
   seleccionarEquipo: (equipoId: string) => void;
@@ -40,7 +45,7 @@ export interface GameContextProps {
   actualizarTabla: (nuevaTabla: TablaEquipo[]) => void;
   reiniciarPartida: () => void;
   cerrarPartidoReciente: () => void;
-  comprarJugador: (jugadorId: string, oferta: number) => { aceptado: boolean; mensaje: string };
+  comprarJugador: (jugadorId: string, oferta: number, promesa?: PromesaGestion | null) => { aceptado: boolean; mensaje: string };
   limpiarNoticias: () => void;
   toggleTitular: (jugadorId: string) => void;
   asignarJugadorEnNodo: (jugadorId: string) => void;
@@ -56,6 +61,17 @@ export interface GameContextProps {
   finalizarTemporada: () => void;
   cerrarReporteAcademia: () => void;
   toggleIntransferible: (jugadorId: string) => void;
+  establecerRolTactico: (jugadorId: string, rol: 'Hombre de Área' | 'Delantero Avanzado' | 'Pivote Defensivo' | 'Organizador' | null) => void;
+  establecerEnfoqueEntrenamiento: (enfoque: 'Físico' | 'Táctico' | 'Técnico') => void;
+  establecerEntrenamientoIndividual: (jugadorId: string, atributo: keyof AtributosJugador | null) => void;
+  establecerPateadorPenales: (jugadorId: string) => void;
+  establecerPateadorTirosLibres: (jugadorId: string) => void;
+  establecerPateadorCorners: (jugadorId: string) => void;
+  establecerEstrategiaCorner: (estrategia: 'Atacar el primer palo' | 'Centro al área chica' | 'Jugar en corto') => void;
+  establecerEstrategiaPases: (estrategia: 'Cortos' | 'Combinados' | 'Largos al espacio') => void;
+  resolverEvento: (opcionId: string) => void;
+  avanzarHoraDeadline: () => void;
+  comprarJugadorAgente: (agenteId: string) => { aceptado: boolean; mensaje: string };
 }
 
 export const GameContext = createContext<GameContextProps | undefined>(undefined);
@@ -86,47 +102,60 @@ const calcularRecaudacionTaquilla = (club: Equipo): { asistencia: number; precio
   return { asistencia, precioTicket, recaudacion };
 };
 
-const inicializarCopaCampeones = (
+const inicializarCopa = (
   equiposList: Equipo[],
   fechaInicio: string,
-  clasificadosLaLiga?: Equipo[]
+  tipo: 'champions' | 'europa',
+  clasificadosLiga?: Equipo[],
+  paisLigaActiva?: string
 ): CopaCampeones => {
   const obtenerPaisEquipoLocal = (equipoId: string): 'espana' | 'inglaterra' | 'italia' | 'alemania' => {
-    if (['real-madrid', 'barcelona', 'atletico-madrid', 'sevilla', 'real-sociedad', 'athletic-bilbao', 'villarreal', 'betis', 'valencia', 'osasuna', 'getafe', 'rayo'].includes(equipoId)) return 'espana';
-    if (['manchester-city', 'arsenal', 'liverpool', 'chelsea', 'manchester-united', 'tottenham', 'newcastle', 'aston-villa', 'brighton', 'west-ham', 'crystal-palace', 'everton'].includes(equipoId)) return 'inglaterra';
-    if (['inter-milan', 'ac-milan', 'juventus', 'napoli', 'roma', 'lazio', 'atalanta', 'fiorentina', 'torino', 'bologna', 'udinese', 'lecce'].includes(equipoId)) return 'italia';
+    if (equiposLaLiga.some(e => e.id === equipoId)) return 'espana';
+    if (equiposPremier.some(e => e.id === equipoId)) return 'inglaterra';
+    if (equiposSerieA.some(e => e.id === equipoId)) return 'italia';
     return 'alemania';
   };
 
-  let esp: Equipo[] = [];
-  if (clasificadosLaLiga && clasificadosLaLiga.length >= 4) {
-    esp = clasificadosLaLiga.slice(0, 4);
-  } else {
-    esp = [...equiposList]
-      .filter(e => obtenerPaisEquipoLocal(e.id) === 'espana')
-      .sort((a, b) => b.reputacion - a.reputacion)
-      .slice(0, 4);
-  }
+  const getTeamsForCountry = (country: 'espana' | 'inglaterra' | 'italia' | 'alemania'): Equipo[] => {
+    const isUserLeague = paisLigaActiva && paisLigaActiva.toLowerCase() === (
+      country === 'espana' ? 'españa' :
+      country === 'inglaterra' ? 'inglaterra' :
+      country === 'italia' ? 'italia' : 'alemania'
+    );
+    if (isUserLeague && clasificadosLiga && clasificadosLiga.length >= 8) {
+      if (tipo === 'champions') {
+        return clasificadosLiga.slice(0, 4);
+      } else {
+        return clasificadosLiga.slice(4, 8);
+      }
+    } else {
+      const sorted = [...equiposList]
+        .filter(e => obtenerPaisEquipoLocal(e.id) === country)
+        .sort((a, b) => b.reputacion - a.reputacion);
+      if (tipo === 'champions') {
+        return sorted.slice(0, 4);
+      } else {
+        return sorted.slice(4, 8);
+      }
+    }
+  };
 
-  const eng = [...equiposList]
-    .filter(e => obtenerPaisEquipoLocal(e.id) === 'inglaterra')
-    .sort((a, b) => b.reputacion - a.reputacion)
-    .slice(0, 4);
-
-  const ita = [...equiposList]
-    .filter(e => obtenerPaisEquipoLocal(e.id) === 'italia')
-    .sort((a, b) => b.reputacion - a.reputacion)
-    .slice(0, 4);
+  const esp = getTeamsForCountry('espana');
+  const eng = getTeamsForCountry('inglaterra');
+  const ita = getTeamsForCountry('italia');
+  const ger = getTeamsForCountry('alemania');
 
   const participantes = [
     ...esp.map(e => e.id),
     ...eng.map(e => e.id),
-    ...ita.map(e => e.id)
+    ...ita.map(e => e.id),
+    ...ger.map(e => e.id)
   ];
 
-  const grupoA = [esp[0].id, eng[1].id, ita[2].id, esp[3].id];
-  const grupoB = [eng[0].id, ita[1].id, esp[2].id, eng[3].id];
-  const grupoC = [ita[0].id, esp[1].id, eng[2].id, ita[3].id];
+  const grupoA = [esp[0].id, eng[1].id, ita[2].id, ger[3].id];
+  const grupoB = [eng[0].id, ita[1].id, ger[2].id, esp[3].id];
+  const grupoC = [ita[0].id, ger[1].id, esp[2].id, eng[3].id];
+  const grupoD = [ger[0].id, esp[1].id, eng[2].id, ita[3].id];
 
   const crearTablaGrupo = (equiposGrupo: string[]): TablaCopa[] => {
     return equiposGrupo.map(eqId => {
@@ -150,7 +179,8 @@ const inicializarCopaCampeones = (
   const grupos: GrupoCopa[] = [
     { id: 'A', equipos: grupoA, tabla: crearTablaGrupo(grupoA) },
     { id: 'B', equipos: grupoB, tabla: crearTablaGrupo(grupoB) },
-    { id: 'C', equipos: grupoC, tabla: crearTablaGrupo(grupoC) }
+    { id: 'C', equipos: grupoC, tabla: crearTablaGrupo(grupoC) },
+    { id: 'D', equipos: grupoD, tabla: crearTablaGrupo(grupoD) }
   ];
 
   const programarGrupo = (grupoId: string, T: string[]) => {
@@ -171,7 +201,7 @@ const inicializarCopaCampeones = (
         fecha,
         grupoId,
         partidos: pairs.map((pair, pIdx) => ({
-          id: `copa-${grupoId}-j${jornadaNum}-p${pIdx}`,
+          id: `copa-${tipo}-${grupoId}-j${jornadaNum}-p${pIdx}`,
           localId: T[pair[0]],
           visitanteId: T[pair[1]],
           jugado: false
@@ -183,7 +213,8 @@ const inicializarCopaCampeones = (
   const partidosGrupos = [
     ...programarGrupo('A', grupoA),
     ...programarGrupo('B', grupoB),
-    ...programarGrupo('C', grupoC)
+    ...programarGrupo('C', grupoC),
+    ...programarGrupo('D', grupoD)
   ];
 
   return {
@@ -191,6 +222,7 @@ const inicializarCopaCampeones = (
     grupos,
     faseActual: 'grupos',
     partidosGrupos,
+    cuartos: null,
     semifinales: null,
     final: null,
     campeon: null
@@ -210,7 +242,8 @@ const formatearMoneda = (valor: number): string => {
 const ejecutarPasoDelTiempo = (
   fechaActual: string,
   jugadores: Jugador[],
-  equipoUsuarioId: string | null
+  equipoUsuarioId: string | null,
+  enfoqueEntrenamiento: 'Físico' | 'Táctico' | 'Técnico'
 ): { nuevaFecha: string; nuevosJugadores: Jugador[]; nuevasNoticias: string[]; cambioDeMes: boolean; esLunes: boolean } => {
   const nuevaFecha = sumarUnDia(fechaActual);
   const nuevasNoticias: string[] = [];
@@ -267,9 +300,12 @@ const ejecutarPasoDelTiempo = (
       }
     }
 
-    // 1. Simulación de recuperación física (Los no titulares/suplentes recuperan forma más rápido: +10, los titulares +3)
+    // 1. Simulación de recuperación física (Físico focus recupera menos forma de lo habitual)
     if (jugadorClon.formaFisica < 100) {
-      const recuperacion = jugadorClon.titular ? 3 : 10;
+      let recuperacion = jugadorClon.titular ? 3 : 10;
+      if (jugadorClon.idEquipo === equipoUsuarioId && enfoqueEntrenamiento === 'Físico') {
+        recuperacion = jugadorClon.titular ? 1 : 5;
+      }
       jugadorClon.formaFisica = Math.min(100, jugadorClon.formaFisica + recuperacion);
     }
 
@@ -366,6 +402,54 @@ const ejecutarPasoDelTiempo = (
       );
     }
 
+    // --- PROCESAMIENTO DE ENTRENAMIENTO SEMANAL (LUNES) ---
+    if (esLunes && jugadorClon.idEquipo === equipoUsuarioId) {
+      // 1. Entrenamiento Club (Físico o Técnico)
+      if (enfoqueEntrenamiento === 'Físico') {
+        if (jugadorClon.edad < 23 && jugadorClon.ca < jugadorClon.pa) {
+          if (Math.random() < 0.35) {
+            const attr = Math.random() < 0.5 ? 'velocidad' : 'resistencia';
+            if (jugadorClon.atributos[attr] < 20) {
+              jugadorClon.atributos[attr] = jugadorClon.atributos[attr] + 1;
+              jugadorClon.ca = Math.min(jugadorClon.pa, jugadorClon.ca + 1);
+              nuevasNoticias.push(
+                `🏋️ [Entrenamiento Físico] ${jugadorClon.nombre} (${jugadorClon.edad} años) mejoró su ${nombresAmigables[attr]} (+1) tras la semana física.`
+              );
+            }
+          }
+        }
+      } else if (enfoqueEntrenamiento === 'Técnico') {
+        if (jugadorClon.edad < 23 && jugadorClon.ca < jugadorClon.pa) {
+          if (Math.random() < 0.35) {
+            const techAttrs: (keyof AtributosJugador)[] = ['remate', 'pase', 'regate', 'tecnica', 'defensa'];
+            const attr = techAttrs[Math.floor(Math.random() * techAttrs.length)];
+            if (jugadorClon.atributos[attr] < 20) {
+              jugadorClon.atributos[attr] = jugadorClon.atributos[attr] + 1;
+              jugadorClon.ca = Math.min(jugadorClon.pa, jugadorClon.ca + 1);
+              nuevasNoticias.push(
+                `⚽ [Entrenamiento Técnico] ${jugadorClon.nombre} (${jugadorClon.edad} años) mejoró su ${nombresAmigables[attr]} (+1) enfocándose en la técnica.`
+              );
+            }
+          }
+        }
+      }
+
+      // 2. Entrenamiento Individual
+      if (jugadorClon.entrenamientoIndividual) {
+        const attr = jugadorClon.entrenamientoIndividual;
+        const prob = jugadorClon.edad < 23 ? 0.40 : 0.20;
+        if (Math.random() < prob && jugadorClon.ca < jugadorClon.pa) {
+          if (jugadorClon.atributos[attr] < 20) {
+            jugadorClon.atributos[attr] = jugadorClon.atributos[attr] + 1;
+            jugadorClon.ca = Math.min(jugadorClon.pa, jugadorClon.ca + 1);
+            nuevasNoticias.push(
+              `🎯 [Entrenamiento Individual] ${jugadorClon.nombre} mejoró su ${nombresAmigables[attr]} (+1) gracias a su enfoque individual.`
+            );
+          }
+        }
+      }
+    }
+
     return jugadorClon;
   });
 
@@ -375,6 +459,364 @@ const ejecutarPasoDelTiempo = (
     nuevasNoticias,
     cambioDeMes,
     esLunes
+  };
+};
+
+// ============================================================
+// GENERADOR DE EVENTOS ALEATORIOS DE VESTUARIO
+// Selecciona un evento contextual basado en el estado del plantel
+// ============================================================
+const generarEventoAleatorio = (
+  plantelCompleto: Jugador[],
+  equipoUsuarioId: string
+): EventoVestuario | null => {
+  const plantel = plantelCompleto.filter(j => j.idEquipo === equipoUsuarioId);
+  if (plantel.length === 0) return null;
+
+  // Candidatos por tipo
+  const problematicos = plantel.filter(j => j.personalidad === 'Problemático');
+  const jovenes = plantel.filter(j => j.edad <= 21 && j.ca < j.pa);
+  const lideres = plantel.filter(j => j.personalidad === 'Líder');
+  const ambiciosos = plantel.filter(j => j.personalidad === 'Ambicioso' && !j.titular);
+  const leales = plantel.filter(j => j.personalidad === 'Leal');
+  const veteranos = plantel.filter(j => j.edad >= 33);
+  const moralBaja = plantel.filter(j => j.moral < 45);
+
+  const eventosPosibles: (() => EventoVestuario | null)[] = [];
+
+  // EVENTO 1: Indisciplina (requiere jugador Problemático)
+  if (problematicos.length > 0) {
+    eventosPosibles.push(() => {
+      const jugador = problematicos[Math.floor(Math.random() * problematicos.length)];
+      return {
+        id: `evt-indisciplina-${Date.now()}`,
+        tipo: 'indisciplina',
+        titulo: 'Noche de Juerga Antes del Entrenamiento',
+        descripcion: `${jugador.nombre} (${jugador.posicion}, Personalidad: Problemático) fue visto saliendo de un boliche a las 3 AM, la noche previa a la sesión de entrenamiento. El preparador físico reporta que llegó tarde y con evidentes signos de cansancio. El vestuario está al tanto. ¿Cómo reaccionás?`,
+        jugadorId: jugador.id,
+        jugadorNombre: jugador.nombre,
+        opciones: [
+          {
+            id: 'sancion',
+            icono: '💸',
+            texto: 'Sancionarlo económicamente',
+            descripcionEfecto: 'Le descontarás una semana de sueldo. El jugador bajará su moral pero la disciplina del equipo mejorará.',
+            efecto: { jugadorMoral: -20, moralEquipo: +5, confianzaDirectiva: +3 }
+          },
+          {
+            id: 'perdonar',
+            icono: '🤝',
+            texto: 'Perdonarlo en privado',
+            descripcionEfecto: 'Una charla a puertas cerradas. Su moral sube pero el capitán pierde confianza en tu autoridad.',
+            efecto: { jugadorMoral: +15, moralCapitan: -15 }
+          },
+          {
+            id: 'venta',
+            icono: '✈️',
+            texto: 'Ponerlo en lista de transferibles',
+            descripcionEfecto: 'Señal clara al vestuario. El jugador bajará su moral a fondo y será más fácil venderlo en el próximo mercado.',
+            efecto: { jugadorMoral: -35, moralEquipo: +8, confianzaDirectiva: +5 }
+          }
+        ]
+      };
+    });
+  }
+
+  // EVENTO 2: Presión Familiar (requiere joven de cantera)
+  if (jovenes.length > 0) {
+    eventosPosibles.push(() => {
+      const jugador = jovenes[Math.floor(Math.random() * jovenes.length)];
+      return {
+        id: `evt-familiar-${Date.now()}`,
+        tipo: 'presion_familiar',
+        titulo: 'La Joya Extraña su País Natal',
+        descripcion: `${jugador.nombre} (${jugador.edad} años, PA: ${jugador.pa}) se acercó al cuerpo técnico en un momento de vulnerabilidad. Extraña a su familia y pide una semana de licencia para visitarlos. Es un jugador con enorme potencial y está en una etapa clave de su desarrollo. ¿Qué decidís?`,
+        jugadorId: jugador.id,
+        jugadorNombre: jugador.nombre,
+        opciones: [
+          {
+            id: 'licencia',
+            icono: '✈️',
+            texto: 'Darle la licencia de una semana',
+            descripcionEfecto: 'El jugador vuelve recargado emocionalmente. Pierde forma física pero su potencial aumenta por la motivación extra.',
+            efecto: { jugadorMoral: +25, jugadorForma: -15, jugadorPa: +2 }
+          },
+          {
+            id: 'negar',
+            icono: '🚫',
+            texto: 'Negarle el viaje (hay partido importante)',
+            descripcionEfecto: 'El jugador entiende pero queda resentido. Su moral se desploma a mínimos.',
+            efecto: { jugadorMoral: -40 }
+          },
+          {
+            id: 'videollamada',
+            icono: '📱',
+            texto: 'Ofrecerle días libres y soporte psicológico',
+            descripcionEfecto: 'Un compromiso de bienestar. No pierde forma y mejora levemente su moral.',
+            efecto: { jugadorMoral: +10, confianzaDirectiva: +2 }
+          }
+        ]
+      };
+    });
+  }
+
+  // EVENTO 3: Conflicto Interno (requiere líder + moral baja general)
+  if (lideres.length > 0 && moralBaja.length >= 3) {
+    eventosPosibles.push(() => {
+      const lider = lideres[Math.floor(Math.random() * lideres.length)];
+      return {
+        id: `evt-conflicto-${Date.now()}`,
+        tipo: 'conflicto_interno',
+        titulo: 'Reunión de Vestuario No Convocada',
+        descripcion: `${lider.nombre} (Personalidad: Líder) organizó una reunión de vestuario sin avisarte. El ambiente general del plantel está tenso y varios jugadores tienen la moral por el piso. Hay rumores de que el grupo le pide al capitán que hable con la directiva. ¿Cómo manejás la situación?`,
+        jugadorId: lider.id,
+        jugadorNombre: lider.nombre,
+        opciones: [
+          {
+            id: 'apoyar',
+            icono: '💬',
+            texto: 'Convocar una charla grupal y escuchar',
+            descripcionEfecto: 'Mostrás liderazgo y empatía. La moral del equipo sube y ganás confianza con la directiva.',
+            efecto: { moralEquipo: +12, confianzaDirectiva: +5 }
+          },
+          {
+            id: 'ignorar',
+            icono: '🙄',
+            texto: 'Ignorarlo y continuar con la rutina',
+            descripcionEfecto: 'El malestar se acumula. La moral baja aún más y el capitán pierde respeto por vos.',
+            efecto: { moralEquipo: -10, moralCapitan: -20, confianzaDirectiva: -8 }
+          },
+          {
+            id: 'multar',
+            icono: '📋',
+            texto: 'Multar al capitán por saltarse la cadena de mando',
+            descripcionEfecto: 'Autoridad fuerte pero divisiva. La moral del equipo se divide. La directiva lo aprueba.',
+            efecto: { jugadorMoral: -25, moralEquipo: -5, confianzaDirectiva: +8 }
+          }
+        ]
+      };
+    });
+  }
+
+  // EVENTO 4: Petición Salarial (requiere ambicioso no titular)
+  if (ambiciosos.length > 0) {
+    eventosPosibles.push(() => {
+      const jugador = ambiciosos[Math.floor(Math.random() * ambiciosos.length)];
+      const aumento = Math.round(jugador.salarioSemanal * 0.3);
+      const aumentoTexto = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(aumento);
+      return {
+        id: `evt-salario-${Date.now()}`,
+        tipo: 'peticion_salarial',
+        titulo: 'Petición de Aumento de Sueldo',
+        descripcion: `El agente de ${jugador.nombre} (CA: ${jugador.ca}, Personalidad: Ambicioso) solicita una reunión urgente. Exige un aumento de ${aumentoTexto} semanales o amenaza con no renovar. Actualmente no está siendo titular y su moral está en declive. La directiva observa la situación.`,
+        jugadorId: jugador.id,
+        jugadorNombre: jugador.nombre,
+        opciones: [
+          {
+            id: 'aceptar',
+            icono: '💰',
+            texto: `Aceptar el aumento (${aumentoTexto}/sem)`,
+            descripcionEfecto: 'El jugador queda contento y renueva su compromiso. Tu presupuesto semanal sube pero la directiva lo ve como debilidad.',
+            efecto: { jugadorMoral: +30, presupuesto: -aumento * 4, confianzaDirectiva: -5 }
+          },
+          {
+            id: 'negociar',
+            icono: '🤝',
+            texto: 'Negociar un aumento menor',
+            descripcionEfecto: 'Llegáis a un término medio. El jugador acepta a regañadientes pero queda estable.',
+            efecto: { jugadorMoral: +10, presupuesto: -Math.round(aumento * 0.5) * 4, confianzaDirectiva: +2 }
+          },
+          {
+            id: 'rechazar',
+            icono: '🚫',
+            texto: 'Rechazar y ponerlo en vitrina',
+            descripcionEfecto: 'Le decís que si no está conforme, lo vendés. Su moral cae pero la directiva aprueba la firmeza.',
+            efecto: { jugadorMoral: -25, confianzaDirectiva: +6 }
+          }
+        ]
+      };
+    });
+  }
+
+  // EVENTO 5: Crítica Pública (requiere veterano o cualquier jugador)
+  if (veteranos.length > 0 || plantel.length > 0) {
+    eventosPosibles.push(() => {
+      const grupo = veteranos.length > 0 ? veteranos : plantel;
+      const jugador = grupo[Math.floor(Math.random() * grupo.length)];
+      return {
+        id: `evt-critica-${Date.now()}`,
+        tipo: 'critica_publica',
+        titulo: 'Declaraciones Polémicas en la Prensa',
+        descripcion: `${jugador.nombre} dio una entrevista a un medio deportivo y declaró que "el equipo necesita cambios urgentes en la dinámica de juego" sin nombrarte directamente. La nota se hizo viral. La directiva está molesta y te pide que actúes para proteger la imagen del club.`,
+        jugadorId: jugador.id,
+        jugadorNombre: jugador.nombre,
+        opciones: [
+          {
+            id: 'defender',
+            icono: '🛡️',
+            texto: 'Defenderlo públicamente ("fue sacado de contexto")',
+            descripcionEfecto: 'El jugador agradece tu apoyo. La moral sube pero la directiva pierde confianza en vos.',
+            efecto: { jugadorMoral: +20, moralEquipo: +5, confianzaDirectiva: -10 }
+          },
+          {
+            id: 'silencio',
+            icono: '🤐',
+            texto: 'Guardar silencio y no alimentar el escándalo',
+            descripcionEfecto: 'La situación se apaga sola. Sin efectos inmediatos, pero ganas prudencia reputacional.',
+            efecto: { confianzaDirectiva: +2 }
+          },
+          {
+            id: 'sancionar',
+            icono: '📣',
+            texto: 'Citarlo y sancionarlo por romper la disciplina',
+            descripcionEfecto: 'Mensaje claro al vestuario. El jugador baja moral pero la directiva valora tu autoridad.',
+            efecto: { jugadorMoral: -20, moralEquipo: -5, confianzaDirectiva: +8 }
+          }
+        ]
+      };
+    });
+  }
+
+  // EVENTO 6: Lesión en entrenamiento de un jugador leal
+  if (leales.length > 0) {
+    eventosPosibles.push(() => {
+      const jugador = leales[Math.floor(Math.random() * leales.length)];
+      return {
+        id: `evt-lesion-entreno-${Date.now()}`,
+        tipo: 'lesion_entrenamiento',
+        titulo: 'Sobreentrenamiento de un Pilar del Equipo',
+        descripcion: `El cuerpo médico alerta sobre ${jugador.nombre} (${jugador.edad} años, Personalidad: Leal). Está entrenando al límite de su capacidad física por iniciativa propia y podría lesionarse si continúa. Su forma física actual es ${jugador.formaFisica}%. ¿Cómo intervenís?`,
+        jugadorId: jugador.id,
+        jugadorNombre: jugador.nombre,
+        opciones: [
+          {
+            id: 'descanso',
+            icono: '🛋️',
+            texto: 'Ordenar descanso preventivo obligatorio',
+            descripcionEfecto: 'El jugador descansa y recupera forma. Baja su moral por no entrenar pero sube la confianza médica.',
+            efecto: { jugadorMoral: -10, jugadorForma: +20, confianzaDirectiva: +3 }
+          },
+          {
+            id: 'continuar',
+            icono: '💪',
+            texto: 'Dejarlo continuar, es su decisión',
+            descripcionEfecto: 'Respetás su voluntad. Su moral sube pero asumís riesgo físico real.',
+            efecto: { jugadorMoral: +15, jugadorForma: -10 }
+          },
+          {
+            id: 'plan',
+            icono: '📊',
+            texto: 'Diseñarle un plan de carga personalizado',
+            descripcionEfecto: 'Lo mejor de ambos mundos. El jugador mejora su forma sin riesgo de lesión y agradece la atención.',
+            efecto: { jugadorMoral: +20, jugadorForma: +10, jugadorCa: +1 }
+          }
+        ]
+      };
+    });
+  }
+
+  // EVENTO 7: Reclamo de Capitanía
+  if (ambiciosos.length > 0 && lideres.length > 0) {
+    eventosPosibles.push(() => {
+      const aspirante = ambiciosos[Math.floor(Math.random() * ambiciosos.length)];
+      const capitanActual = lideres[Math.floor(Math.random() * lideres.length)];
+      if (aspirante.id === capitanActual.id) return null;
+      return {
+        id: `evt-capitania-${Date.now()}`,
+        tipo: 'reclamo_capitania',
+        titulo: 'Disputa por el Brazalete de Capitán',
+        descripcion: `${aspirante.nombre} (Personalidad: Ambicioso, CA: ${aspirante.ca}) manifestó en privado su deseo de ser el nuevo capitán del equipo. Actualmente ese rol lo ocupa ${capitanActual.nombre} (CA: ${capitanActual.ca}). La tensión entre ambos jugadores es notoria en el entrenamiento diario.`,
+        jugadorId: aspirante.id,
+        jugadorNombre: aspirante.nombre,
+        opciones: [
+          {
+            id: 'mantener',
+            icono: '🏆',
+            texto: `Mantener a ${capitanActual.nombre} como capitán`,
+            descripcionEfecto: 'El capitán actual mantiene su autoridad. El aspirante baja moral pero la unidad del grupo se preserva.',
+            efecto: { jugadorMoral: -15, moralCapitan: +10 }
+          },
+          {
+            id: 'cambiar',
+            icono: '🔄',
+            texto: `Designar a ${aspirante.nombre} como nuevo capitán`,
+            descripcionEfecto: 'El cambio genera tensión inicial. El nuevo capitán sube su moral pero el anterior la baja fuerte.',
+            efecto: { jugadorMoral: +30, moralCapitan: -25, moralEquipo: -5 }
+          },
+          {
+            id: 'cocapitania',
+            icono: '🤲',
+            texto: 'Instaurar una co-capitanía rotativa',
+            descripcionEfecto: 'Una solución diplomática. Ambos quedan conformes y la moral general mejora levemente.',
+            efecto: { jugadorMoral: +15, moralCapitan: +5, moralEquipo: +5, confianzaDirectiva: +2 }
+          }
+        ]
+      };
+    });
+  }
+
+  // Seleccionar uno de los eventos posibles al azar
+  if (eventosPosibles.length === 0) return null;
+  const generadores = eventosPosibles.filter(Boolean);
+  if (generadores.length === 0) return null;
+
+  // Mezclar y probar hasta encontrar uno válido
+  const mezclados = [...generadores].sort(() => Math.random() - 0.5);
+  for (const gen of mezclados) {
+    const evento = gen();
+    if (evento) return evento;
+  }
+  return null;
+};
+
+// ============================================================
+// GENERADOR DE AGENTES LIBRES PARA DEADLINE DAY
+// Crea jugadores sin club disponibles con 30% de descuento
+// ============================================================
+const POSICIONES_AGENTE: Posicion[] = ['POR', 'DFC', 'LD', 'LI', 'MC', 'MCO', 'ED', 'EI', 'DC'];
+const NACS_AGENTE = ['España', 'Francia', 'Alemania', 'Italia', 'Brasil', 'Argentina', 'Portugal', 'Países Bajos'];
+const NOMBRES_AGENTE = ['Kosta', 'Mateo', 'Damian', 'Felix', 'Luca', 'Marco', 'Omar', 'Diogo', 'Arjan', 'Nuno', 'Tomas', 'Eder', 'Rafael', 'Sandro', 'Bruno', 'Alexei', 'Sergey', 'Karim', 'Yannick', 'Pascal'];
+const APELLIDOS_AGENTE = ['Braga', 'Melo', 'Kovač', 'Heinz', 'Fontaine', 'Sosa', 'Ardito', 'Martins', 'Vogel', 'Huber', 'Silva', 'Ferreira', 'Andrade', 'Varela', 'Sousa', 'Petrov', 'Novak', 'Blanc', 'Leconte', 'Moreau'];
+const PERSONALIDADES: PersonalidadJugador[] = ['Profesional', 'Leal', 'Ambicioso', 'Líder', 'Líder'];
+
+const generarAgenteLibre = (seed: number): JugadorAgente => {
+  const rng = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min;
+  const pos = POSICIONES_AGENTE[seed % POSICIONES_AGENTE.length];
+  const ca = rng(60, 78);
+  const pa = Math.min(100, ca + rng(0, 10));
+  const valorMercado = ca * rng(180000, 280000);
+  const valorDescuento = Math.round(valorMercado * 0.70);
+  const nombre = `${NOMBRES_AGENTE[rng(0, NOMBRES_AGENTE.length - 1)]} ${APELLIDOS_AGENTE[rng(0, APELLIDOS_AGENTE.length - 1)]}`;
+  const base = rng(8, 14);
+  return {
+    id: `agente-${seed}-${Math.random().toString(36).substr(2, 6)}`,
+    nombre,
+    posicion: pos,
+    edad: rng(23, 31),
+    nacionalidad: NACS_AGENTE[rng(0, NACS_AGENTE.length - 1)],
+    ca,
+    pa,
+    valorMercado,
+    valorDescuento,
+    personalidad: PERSONALIDADES[rng(0, PERSONALIDADES.length - 1)],
+    salarioSemanal: Math.round(valorMercado * 0.002),
+    comprado: false,
+    atributos: {
+      remate:           pos === 'DC' || pos === 'ED' || pos === 'EI' ? rng(base + 2, base + 5) : rng(base - 2, base + 1),
+      pase:             pos === 'MC' || pos === 'MCO' ? rng(base + 2, base + 5) : rng(base - 1, base + 2),
+      regate:           pos === 'ED' || pos === 'EI' ? rng(base + 2, base + 4) : rng(base - 2, base + 1),
+      defensa:          pos === 'DFC' || pos === 'LD' || pos === 'LI' ? rng(base + 2, base + 5) : rng(base - 3, base),
+      tecnica:          rng(base, base + 3),
+      velocidad:        pos === 'ED' || pos === 'EI' || pos === 'DC' ? rng(base + 1, base + 4) : rng(base - 1, base + 2),
+      aceleracion:      rng(base, base + 3),
+      resistencia:      rng(base, base + 3),
+      fuerza:           rng(base, base + 2),
+      vision:           pos === 'MCO' || pos === 'MC' ? rng(base + 1, base + 4) : rng(base - 1, base + 2),
+      decisiones:       rng(base, base + 3),
+      determinacion:    rng(base, base + 3),
+      posicionamiento:  rng(base, base + 3),
+      reflejos:         pos === 'POR' ? rng(base + 3, base + 6) : rng(base - 4, base - 1),
+    }
   };
 };
 
@@ -417,11 +859,18 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [ofertaRecibidaActiva, setOfertaRecibidaActiva] = useState<OfertaRecibida | null>(null);
   const [fixture, setFixture] = useState<Jornada[]>(() => fixtureInicial);
   const [reporteAcademia, setReporteAcademia] = useState<AcademiaReporte | null>(null);
-  const [partidoEnVivo, setPartidoEnVivo] = useState<{ local: Equipo; visitante: Equipo; jornada: Jornada; tipo?: 'liga' | 'copa'; grupoId?: string; partidoId?: string } | null>(null);
+  const [partidoEnVivo, setPartidoEnVivo] = useState<{ local: Equipo; visitante: Equipo; jornada: Jornada; tipo?: 'liga' | 'copa'; grupoId?: string; partidoId?: string; subtipo?: 'champions' | 'europa' } | null>(null);
   const [charlaActiva, setCharlaActiva] = useState<CharlaJugador | null>(null);
   const [copaCampeones, setCopaCampeones] = useState<CopaCampeones | null>(() => {
-    return inicializarCopaCampeones(equiposIniciales, '2026-08-17');
+    return inicializarCopa(equiposIniciales, '2026-08-17', 'champions');
   });
+  const [copaEuropa, setCopaEuropa] = useState<CopaCampeones | null>(() => {
+    return inicializarCopa(equiposIniciales, '2026-08-17', 'europa');
+  });
+  const [eventoActivo, setEventoActivo] = useState<EventoVestuario | null>(null);
+  const [deadlineDayActivo, setDeadlineDayActivo] = useState<boolean>(false);
+  const [horasDeadline, setHorasDeadline] = useState<number>(24);
+  const [jugadoresAgentes, setJugadoresAgentes] = useState<JugadorAgente[]>([]);
   
   // Estado para las noticias de prensa del vestuario
   const [noticias, setNoticias] = useState<string[]>([
@@ -431,84 +880,127 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   // Derivado: Datos completos del equipo del usuario
   const equipoUsuario = equipos.find(e => e.id === equipoUsuarioId) || null;
 
-  const obtenerJornadaCopaHoy = useCallback((fecha: string): { tipo: 'grupos' | 'semifinales' | 'final'; matchdays: { fecha: string; partidos: PartidoCopa[]; grupoId?: string }[] } | null => {
-    if (!copaCampeones) return null;
-    if (copaCampeones.faseActual === 'grupos') {
-      const matchdays = copaCampeones.partidosGrupos.filter(jg => jg.fecha === fecha);
+  const obtenerJornadaCopaHoy = useCallback((fecha: string, copa: CopaCampeones | null): { tipo: 'grupos' | 'cuartos' | 'semifinales' | 'final'; matchdays: { fecha: string; partidos: PartidoCopa[]; grupoId?: string }[] } | null => {
+    if (!copa) return null;
+    if (copa.faseActual === 'grupos') {
+      const matchdays = copa.partidosGrupos.filter(jg => jg.fecha === fecha);
       if (matchdays.length > 0 && matchdays.some(jg => jg.partidos.some(p => !p.jugado))) {
         return { tipo: 'grupos', matchdays };
       }
-    } else if (copaCampeones.faseActual === 'semifinales') {
-      const semi = copaCampeones.semifinales;
+    } else if (copa.faseActual === 'cuartos') {
+      const q = copa.cuartos;
+      if (q && q.fecha === fecha && q.partidos.some(p => !p.jugado)) {
+        return { tipo: 'cuartos', matchdays: [q] };
+      }
+    } else if (copa.faseActual === 'semifinales') {
+      const semi = copa.semifinales;
       if (semi && semi.fecha === fecha && semi.partidos.some(p => !p.jugado)) {
         return { tipo: 'semifinales', matchdays: [semi] };
       }
-    } else if (copaCampeones.faseActual === 'final') {
-      const fin = copaCampeones.final;
+    } else if (copa.faseActual === 'final') {
+      const fin = copa.final;
       if (fin && fin.fecha === fecha && !fin.partido.jugado) {
         return { tipo: 'final', matchdays: [{ fecha, partidos: [fin.partido] }] };
       }
     }
     return null;
-  }, [copaCampeones]);
+  }, []);
 
-  const procesarTransicionCopa = useCallback((copa: CopaCampeones): CopaCampeones => {
+  const procesarTransicionCopa = useCallback((copa: CopaCampeones, tipo: 'champions' | 'europa'): CopaCampeones => {
     const copiaCopa = { ...copa };
+    const label = tipo === 'champions' ? 'Copa de Campeones' : 'Copa Continental';
+
     if (copiaCopa.faseActual === 'grupos') {
       const totalJugados = copiaCopa.partidosGrupos.reduce((sum, jg) => sum + jg.partidos.filter(p => p.jugado).length, 0);
-      if (totalJugados === 36) {
-        const winners: { id: string; pts: number; gd: number; gf: number }[] = [];
-        const runnersUp: { id: string; pts: number; gd: number; gf: number }[] = [];
-        
+      if (totalJugados === 48) {
+        const winners: Record<string, string> = {};
+        const runnersUp: Record<string, string> = {};
+
         copiaCopa.grupos.forEach(grupo => {
           const tablaOrdenada = [...grupo.tabla].sort((a, b) => {
             if (b.puntos !== a.puntos) return b.puntos - a.puntos;
             if (b.diferenciaGoles !== a.diferenciaGoles) return b.diferenciaGoles - a.diferenciaGoles;
             return b.golesFavor - a.golesFavor;
           });
-          
-          const w = tablaOrdenada[0];
-          const r = tablaOrdenada[1];
-          winners.push({ id: w.idEquipo, pts: w.puntos, gd: w.diferenciaGoles, gf: w.golesFavor });
-          runnersUp.push({ id: r.idEquipo, pts: r.puntos, gd: r.diferenciaGoles, gf: r.golesFavor });
+          winners[grupo.id] = tablaOrdenada[0].idEquipo;
+          runnersUp[grupo.id] = tablaOrdenada[1].idEquipo;
         });
-        
-        winners.sort((a, b) => {
-          if (b.pts !== a.pts) return b.pts - a.pts;
-          if (b.gd !== a.gd) return b.gd - a.gd;
-          return b.gf - a.gf;
-        });
-        
-        runnersUp.sort((a, b) => {
-          if (b.pts !== a.pts) return b.pts - a.pts;
-          if (b.gd !== a.gd) return b.gd - a.gd;
-          return b.gf - a.gf;
-        });
-        
-        const w1 = winners[0].id;
-        const w2 = winners[1].id;
-        const w3 = winners[2].id;
-        const bestRunnerUp = runnersUp[0].id;
-        
+
+        const wA = winners['A'];
+        const rA = runnersUp['A'];
+        const wB = winners['B'];
+        const rB = runnersUp['B'];
+        const wC = winners['C'];
+        const rC = runnersUp['C'];
+        const wD = winners['D'];
+        const rD = runnersUp['D'];
+
         const fechaRound6 = copiaCopa.partidosGrupos.find(jg => jg.jornada === 6)!.fecha;
-        const fechaSemi = sumarDias(fechaRound6, 21);
-        
+        const fechaCuartos = sumarDias(fechaRound6, 21);
+
+        copiaCopa.cuartos = {
+          fecha: fechaCuartos,
+          partidos: [
+            { id: `copa-${tipo}-cuartos-1`, localId: wA, visitanteId: rB, jugado: false },
+            { id: `copa-${tipo}-cuartos-2`, localId: wB, visitanteId: rA, jugado: false },
+            { id: `copa-${tipo}-cuartos-3`, localId: wC, visitanteId: rD, jugado: false },
+            { id: `copa-${tipo}-cuartos-4`, localId: wD, visitanteId: rC, jugado: false }
+          ]
+        };
+        copiaCopa.faseActual = 'cuartos';
+
+        const nameWA = equipos.find(e => e.id === wA)?.nombre || wA;
+        const nameRB = equipos.find(e => e.id === rB)?.nombre || rB;
+        const nameWB = equipos.find(e => e.id === wB)?.nombre || wB;
+        const nameRA = equipos.find(e => e.id === rA)?.nombre || rA;
+        const nameWC = equipos.find(e => e.id === wC)?.nombre || wC;
+        const nameRD = equipos.find(e => e.id === rD)?.nombre || rD;
+        const nameWD = equipos.find(e => e.id === wD)?.nombre || wD;
+        const nameRC = equipos.find(e => e.id === rC)?.nombre || rC;
+
+        setNoticias(prev => [
+          `🏆 [${label}] ¡Definidos los Cuartos de Final! Cruces: ${nameWA} vs ${nameRB}, ${nameWB} vs ${nameRA}, ${nameWC} vs ${nameRD}, y ${nameWD} vs ${nameRC}. Programados para el ${fechaCuartos}.`,
+          ...prev
+        ]);
+      }
+    } else if (copiaCopa.faseActual === 'cuartos') {
+      if (copiaCopa.cuartos && copiaCopa.cuartos.partidos.every(p => p.jugado)) {
+        const q1 = copiaCopa.cuartos.partidos[0];
+        const q2 = copiaCopa.cuartos.partidos[1];
+        const q3 = copiaCopa.cuartos.partidos[2];
+        const q4 = copiaCopa.cuartos.partidos[3];
+
+        const obtenerGanador = (p: PartidoCopa): string => {
+          if (p.golesLocal! > p.golesVisitante!) return p.localId;
+          if (p.golesLocal! < p.golesVisitante!) return p.visitanteId;
+          if (p.penalesLocal! > p.penalesVisitante!) return p.localId;
+          return p.visitanteId;
+        };
+
+        const wQ1 = obtenerGanador(q1);
+        const wQ2 = obtenerGanador(q2);
+        const wQ3 = obtenerGanador(q3);
+        const wQ4 = obtenerGanador(q4);
+
+        const fechaCuartos = copiaCopa.cuartos.fecha;
+        const fechaSemi = sumarDias(fechaCuartos, 21);
+
         copiaCopa.semifinales = {
           fecha: fechaSemi,
           partidos: [
-            { id: 'copa-semi-1', localId: w1, visitanteId: bestRunnerUp, jugado: false },
-            { id: 'copa-semi-2', localId: w2, visitanteId: w3, jugado: false }
+            { id: `copa-${tipo}-semi-1`, localId: wQ1, visitanteId: wQ3, jugado: false },
+            { id: `copa-${tipo}-semi-2`, localId: wQ2, visitanteId: wQ4, jugado: false }
           ]
         };
         copiaCopa.faseActual = 'semifinales';
-        
-        const nameW1 = equipos.find(e => e.id === w1)?.nombre || w1;
-        const nameBestRunner = equipos.find(e => e.id === bestRunnerUp)?.nombre || bestRunnerUp;
-        const nameW2 = equipos.find(e => e.id === w2)?.nombre || w2;
-        const nameW3 = equipos.find(e => e.id === w3)?.nombre || w3;
-        
+
+        const nameQ1 = equipos.find(e => e.id === wQ1)?.nombre || wQ1;
+        const nameQ3 = equipos.find(e => e.id === wQ3)?.nombre || wQ3;
+        const nameQ2 = equipos.find(e => e.id === wQ2)?.nombre || wQ2;
+        const nameQ4 = equipos.find(e => e.id === wQ4)?.nombre || wQ4;
+
         setNoticias(prev => [
-          `🏆 [Copa de Campeones] ¡Definidas las Semifinales continentales! Cruces: ${nameW1} vs ${nameBestRunner} y ${nameW2} vs ${nameW3}. Partidos programados para el ${fechaSemi}.`,
+          `🏆 [${label}] ¡Definidas las Semifinales! Cruces: ${nameQ1} vs ${nameQ3} y ${nameQ2} vs ${nameQ4}. Programados para el ${fechaSemi}.`,
           ...prev
         ]);
       }
@@ -516,31 +1008,31 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (copiaCopa.semifinales && copiaCopa.semifinales.partidos.every(p => p.jugado)) {
         const s1 = copiaCopa.semifinales.partidos[0];
         const s2 = copiaCopa.semifinales.partidos[1];
-        
+
         const obtenerGanador = (p: PartidoCopa): string => {
           if (p.golesLocal! > p.golesVisitante!) return p.localId;
           if (p.golesLocal! < p.golesVisitante!) return p.visitanteId;
           if (p.penalesLocal! > p.penalesVisitante!) return p.localId;
           return p.visitanteId;
         };
-        
+
         const wSemi1 = obtenerGanador(s1);
         const wSemi2 = obtenerGanador(s2);
-        
+
         const fechaSemi = copiaCopa.semifinales.fecha;
         const fechaFinal = sumarDias(fechaSemi, 14);
-        
+
         copiaCopa.final = {
           fecha: fechaFinal,
-          partido: { id: 'copa-final', localId: wSemi1, visitanteId: wSemi2, jugado: false }
+          partido: { id: `copa-${tipo}-final`, localId: wSemi1, visitanteId: wSemi2, jugado: false }
         };
         copiaCopa.faseActual = 'final';
-        
+
         const nameSemi1 = equipos.find(e => e.id === wSemi1)?.nombre || wSemi1;
         const nameSemi2 = equipos.find(e => e.id === wSemi2)?.nombre || wSemi2;
-        
+
         setNoticias(prev => [
-          `🏆 [Copa de Campeones] ¡Llegó la Gran Final Continental! Se enfrentarán ${nameSemi1} vs ${nameSemi2} el día ${fechaFinal}.`,
+          `🏆 [${label}] ¡Llegó la Gran Final! Se enfrentarán ${nameSemi1} vs ${nameSemi2} el día ${fechaFinal}.`,
           ...prev
         ]);
       }
@@ -556,11 +1048,11 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         const campeonId = obtenerGanador(p);
         copiaCopa.campeon = campeonId;
         copiaCopa.faseActual = 'finalizada';
-        
+
         const nameCampeon = equipos.find(e => e.id === campeonId)?.nombre || campeonId;
-        
+
         setNoticias(prev => [
-          `🏆 [Copa de Campeones] ¡HISTÓRICO! El ${nameCampeon} se corona campeón de la Copa de Campeones. ¡Felicidades!`,
+          `🏆 [${label}] ¡HISTÓRICO! El ${nameCampeon} se corona campeón de la ${label}. ¡Felicidades!`,
           ...prev
         ]);
       }
@@ -573,6 +1065,58 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   // Seleccionar club para dirigir
   const seleccionarEquipo = useCallback((equipoId: string) => {
     setEquipoUsuarioId(equipoId);
+
+    // Sincronizar liga y fixture según el país del equipo seleccionado
+    let leagueId = 'la-liga';
+    let leagueName = 'La Liga EA Sports';
+    let leagueCountry = 'España';
+    let leagueTeams = equiposLaLiga;
+
+    if (equiposPremier.some(e => e.id === equipoId)) {
+      leagueId = 'premier-league';
+      leagueName = 'Premier League';
+      leagueCountry = 'Inglaterra';
+      leagueTeams = equiposPremier;
+    } else if (equiposSerieA.some(e => e.id === equipoId)) {
+      leagueId = 'serie-a';
+      leagueName = 'Serie A';
+      leagueCountry = 'Italia';
+      leagueTeams = equiposSerieA;
+    } else if (equiposBundesliga.some(e => e.id === equipoId)) {
+      leagueId = 'bundesliga';
+      leagueName = 'Bundesliga';
+      leagueCountry = 'Alemania';
+      leagueTeams = equiposBundesliga;
+    }
+
+    const newTabla: TablaEquipo[] = leagueTeams.map(e => ({
+      idEquipo: e.id,
+      nombreEquipo: e.nombre,
+      partidosJugados: 0,
+      ganados: 0,
+      empatados: 0,
+      perdidos: 0,
+      golesFavor: 0,
+      golesContra: 0,
+      diferenciaGoles: 0,
+      puntos: 0,
+      forma: []
+    }));
+
+    setLiga({
+      id: leagueId,
+      nombre: leagueName,
+      pais: leagueCountry,
+      temporada: '2026/2027',
+      equipos: leagueTeams,
+      tabla: newTabla
+    });
+
+    const newFixture = generarFixtureRoundRobin(
+      leagueTeams.map(e => e.id),
+      '2026-08-17'
+    );
+    setFixture(newFixture);
   }, []);
 
   // Limpiar el historial de noticias
@@ -868,11 +1412,13 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const simularPartidosCopaEnFondo = (
     copa: CopaCampeones,
     partidos: PartidoCopa[],
+    tipo: 'champions' | 'europa',
     grupoId?: string
   ): { updatedCopa: CopaCampeones; noticiasCopa: string[]; recaudaciones: Record<string, number> } => {
     const copiaCopa = { ...copa };
     const noticiasCopa: string[] = [];
     const recaudaciones: Record<string, number> = {};
+    const cupLabel = tipo === 'champions' ? 'Copa de Campeones' : 'Copa Continental';
 
     partidos.forEach(p => {
       if (p.jugado) return;
@@ -896,11 +1442,11 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         p.penalesVisitante = penVisitante;
         p.eventos.push(`🏆 [Definición por Penales] ${lObj.nombreCorto} (${penLocal}) - (${penVisitante}) ${vObj.nombreCorto}.`);
         noticiasCopa.push(
-          `🏆 [Copa de Campeones] ${lObj.nombre} avanzó tras vencer a ${vObj.nombre} en la tanda de penales por (${penLocal}-${penVisitante}) luego de empatar ${res.golesLocal}-${res.golesVisitante} en los 90 minutos.`
+          `🏆 [${cupLabel}] ${lObj.nombre} avanzó tras vencer a ${vObj.nombre} en la tanda de penales por (${penLocal}-${penVisitante}) luego de empatar ${res.golesLocal}-${res.golesVisitante} en los 90 minutos.`
         );
       } else {
         noticiasCopa.push(
-          `🏆 [Copa de Campeones] ${lObj.nombre} ${res.golesLocal} - ${res.golesVisitante} ${vObj.nombre}.`
+          `🏆 [${cupLabel}] ${lObj.nombre} ${res.golesLocal} - ${res.golesVisitante} ${vObj.nombre}.`
         );
       }
 
@@ -941,37 +1487,76 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   // Avanzar al día siguiente e implementar el descanso físico / simulación de partidos
   const avanzarDia = useCallback(() => {
-    // A. Verificar si hoy se juega Copa de Campeones
-    const jornadaCopaHoy = obtenerJornadaCopaHoy(fechaActual);
+    // A. Verificar si hoy se juega Copa de Campeones o Copa Continental
+    const championsJornada = obtenerJornadaCopaHoy(fechaActual, copaCampeones);
+    const europaJornada = obtenerJornadaCopaHoy(fechaActual, copaEuropa);
     
-    if (jornadaCopaHoy && copaCampeones) {
+    if ((championsJornada && copaCampeones) || (europaJornada && copaEuropa)) {
       let userPartido: PartidoCopa | null = null;
       let userMatchday: any = null;
+      let userCupType: 'champions' | 'europa' | null = null;
       
-      for (const jg of jornadaCopaHoy.matchdays) {
-        const found = jg.partidos.find(p => p.localId === equipoUsuarioId || p.visitanteId === equipoUsuarioId);
-        if (found && !found.jugado) {
-          userPartido = found;
-          userMatchday = jg;
-          break;
+      if (championsJornada && copaCampeones) {
+        for (const jg of championsJornada.matchdays) {
+          const found = jg.partidos.find(p => p.localId === equipoUsuarioId || p.visitanteId === equipoUsuarioId);
+          if (found && !found.jugado) {
+            userPartido = found;
+            userMatchday = jg;
+            userCupType = 'champions';
+            break;
+          }
         }
       }
       
-      if (userPartido && equipoUsuarioId) {
+      if (!userPartido && europaJornada && copaEuropa) {
+        for (const jg of europaJornada.matchdays) {
+          const found = jg.partidos.find(p => p.localId === equipoUsuarioId || p.visitanteId === equipoUsuarioId);
+          if (found && !found.jugado) {
+            userPartido = found;
+            userMatchday = jg;
+            userCupType = 'europa';
+            break;
+          }
+        }
+      }
+      
+      if (userPartido && equipoUsuarioId && userCupType) {
         // --- EL USUARIO JUEGA HOY EN COPA ---
-        let currentCopa = { ...copaCampeones };
+        let currentChampions = { ...copaCampeones! };
+        let currentEuropa = { ...copaEuropa! };
         let allNoticiasCopa: string[] = [];
         const recaudacionesCopa: Record<string, number> = {};
         
-        jornadaCopaHoy.matchdays.forEach(jg => {
-          const partidosSimulables = jg.partidos.filter(p => p.id !== userPartido!.id && !p.jugado);
-          const resSim = simularPartidosCopaEnFondo(currentCopa, partidosSimulables, 'grupoId' in jg ? (jg as any).grupoId : undefined);
-          currentCopa = resSim.updatedCopa;
-          allNoticiasCopa.push(...resSim.noticiasCopa);
-          Object.assign(recaudacionesCopa, resSim.recaudaciones);
-        });
+        if (championsJornada) {
+          championsJornada.matchdays.forEach(jg => {
+            const partidosSimulables = jg.partidos.filter(p => (userCupType !== 'champions' || p.id !== userPartido!.id) && !p.jugado);
+            const resSim = simularPartidosCopaEnFondo(currentChampions, partidosSimulables, 'champions', 'grupoId' in jg ? (jg as any).grupoId : undefined);
+            currentChampions = resSim.updatedCopa;
+            allNoticiasCopa.push(...resSim.noticiasCopa);
+            Object.assign(recaudacionesCopa, resSim.recaudaciones);
+          });
+        }
+
+        if (europaJornada) {
+          europaJornada.matchdays.forEach(jg => {
+            const partidosSimulables = jg.partidos.filter(p => (userCupType !== 'europa' || p.id !== userPartido!.id) && !p.jugado);
+            const resSim = simularPartidosCopaEnFondo(currentEuropa, partidosSimulables, 'europa', 'grupoId' in jg ? (jg as any).grupoId : undefined);
+            currentEuropa = resSim.updatedCopa;
+            allNoticiasCopa.push(...resSim.noticiasCopa);
+            Object.assign(recaudacionesCopa, resSim.recaudaciones);
+          });
+        }
         
-        setCopaCampeones(currentCopa);
+        if (userCupType === 'champions') {
+          setCopaCampeones(currentChampions);
+          const finalEuropa = procesarTransicionCopa(currentEuropa, 'europa');
+          setCopaEuropa(finalEuropa);
+        } else {
+          setCopaEuropa(currentEuropa);
+          const finalChampions = procesarTransicionCopa(currentChampions, 'champions');
+          setCopaCampeones(finalChampions);
+        }
+
         if (allNoticiasCopa.length > 0) {
           setNoticias(prev => [...allNoticiasCopa, ...prev]);
         }
@@ -999,31 +1584,49 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           },
           tipo: 'copa',
           grupoId: 'grupoId' in userMatchday ? userMatchday.grupoId : undefined,
-          partidoId: userPartido!.id
+          partidoId: userPartido!.id,
+          subtipo: userCupType
         });
         
         return;
       } else {
         // --- EL USUARIO NO JUEGA HOY EN COPA ---
-        let currentCopa = { ...copaCampeones };
+        let currentChampions = { ...copaCampeones! };
+        let currentEuropa = { ...copaEuropa! };
         let allNoticiasCopa: string[] = [];
         const recaudacionesCopa: Record<string, number> = {};
         
-        jornadaCopaHoy.matchdays.forEach(jg => {
-          const partidosSimulables = jg.partidos.filter(p => !p.jugado);
-          const resSim = simularPartidosCopaEnFondo(currentCopa, partidosSimulables, 'grupoId' in jg ? (jg as any).grupoId : undefined);
-          currentCopa = resSim.updatedCopa;
-          allNoticiasCopa.push(...resSim.noticiasCopa);
-          Object.assign(recaudacionesCopa, resSim.recaudaciones);
-        });
+        if (championsJornada) {
+          championsJornada.matchdays.forEach(jg => {
+            const partidosSimulables = jg.partidos.filter(p => !p.jugado);
+            const resSim = simularPartidosCopaEnFondo(currentChampions, partidosSimulables, 'champions', 'grupoId' in jg ? (jg as any).grupoId : undefined);
+            currentChampions = resSim.updatedCopa;
+            allNoticiasCopa.push(...resSim.noticiasCopa);
+            Object.assign(recaudacionesCopa, resSim.recaudaciones);
+          });
+        }
+
+        if (europaJornada) {
+          europaJornada.matchdays.forEach(jg => {
+            const partidosSimulables = jg.partidos.filter(p => !p.jugado);
+            const resSim = simularPartidosCopaEnFondo(currentEuropa, partidosSimulables, 'europa', 'grupoId' in jg ? (jg as any).grupoId : undefined);
+            currentEuropa = resSim.updatedCopa;
+            allNoticiasCopa.push(...resSim.noticiasCopa);
+            Object.assign(recaudacionesCopa, resSim.recaudaciones);
+          });
+        }
         
-        const finalCopa = procesarTransicionCopa(currentCopa);
-        setCopaCampeones(finalCopa);
+        const finalChampions = procesarTransicionCopa(currentChampions, 'champions');
+        const finalEuropa = procesarTransicionCopa(currentEuropa, 'europa');
+        setCopaCampeones(finalChampions);
+        setCopaEuropa(finalEuropa);
+
         if (allNoticiasCopa.length > 0) {
           setNoticias(prev => [...allNoticiasCopa, ...prev]);
         }
         
-        const { nuevaFecha, nuevosJugadores: stepJugadores, nuevasNoticias, cambioDeMes, esLunes } = ejecutarPasoDelTiempo(fechaActual, jugadores, equipoUsuarioId);
+        const enfoque = equipos.find(e => e.id === equipoUsuarioId)?.enfoqueEntrenamiento || 'Táctico';
+        const { nuevaFecha, nuevosJugadores: stepJugadores, nuevasNoticias, cambioDeMes, esLunes } = ejecutarPasoDelTiempo(fechaActual, jugadores, equipoUsuarioId, enfoque);
         
         if (esLunes) {
           procesarFinanzasSemanales(stepJugadores, nuevasNoticias);
@@ -1253,7 +1856,8 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
     } else {
       // --- DÍA DE DESCANSO / PREPARACIÓN ---
-      const { nuevaFecha, nuevosJugadores: stepJugadores, nuevasNoticias, cambioDeMes, esLunes } = ejecutarPasoDelTiempo(fechaActual, jugadores, equipoUsuarioId);
+      const enfoque = equipos.find(e => e.id === equipoUsuarioId)?.enfoqueEntrenamiento || 'Táctico';
+      const { nuevaFecha, nuevosJugadores: stepJugadores, nuevasNoticias, cambioDeMes, esLunes } = ejecutarPasoDelTiempo(fechaActual, jugadores, equipoUsuarioId, enfoque);
       
       if (esLunes) {
         procesarFinanzasSemanales(stepJugadores, nuevasNoticias);
@@ -1287,15 +1891,173 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (nuevasNoticias.length > 0) {
         setNoticias(prev => [...nuevasNoticias, ...prev]);
       }
+
+      // ============================================================
+      // EVENTOS ALEATORIOS DE VESTUARIO (5% de probabilidad en días sin partido)
+      // Solo se generan si el usuario tiene equipo y NO hay ya un evento activo
+      // ============================================================
+      if (equipoUsuarioId && !eventoActivo && Math.random() < 0.05) {
+        const evento = generarEventoAleatorio(finalJugadores, equipoUsuarioId);
+        if (evento) {
+          setEventoActivo(evento);
+        }
+      }
+
+      // ============================================================
+      // DETECCIÓN DE DEADLINE DAY (31 de Agosto o 31 de Enero)
+      // Al avanzar al día siguiente, si es el último día del mercado,
+      // activar el modo especial Deadline Day
+      // ============================================================
+      const ddDate = new Date(nuevaFecha + 'T12:00:00');
+      const ddMes = ddDate.getMonth();   // 0 = enero, 7 = agosto
+      const ddDia = ddDate.getDate();
+      const esDeadlineDay = (ddMes === 7 && ddDia === 31) || (ddMes === 0 && ddDia === 31);
+      if (esDeadlineDay && !deadlineDayActivo && equipoUsuarioId) {
+        setDeadlineDayActivo(true);
+        setHorasDeadline(24);
+        const agentesIniciales = Array.from({ length: 5 }, (_, i) => generarAgenteLibre(Date.now() + i * 1000));
+        setJugadoresAgentes(agentesIniciales);
+        setNoticias(prev => [
+          `🚨 [DEADLINE DAY] ¡Hoy es el ÚLTIMO DÍA del mercado de pases! Tienes 24 horas para cerrar operaciones. La IA estará muy activa. ¡No pierdas el tiempo!`,
+          ...prev
+        ]);
+      }
     }
-  }, [fechaActual, equipos, jugadores, equipoUsuarioId, procesarFinanzasSemanales, intentarGenerarOfertaIA, procesarMercadoFichajesIA, fixture]);
+  }, [fechaActual, equipos, jugadores, equipoUsuarioId, procesarFinanzasSemanales, intentarGenerarOfertaIA, procesarMercadoFichajesIA, fixture, eventoActivo]);
+
+  // ============================================================
+  // AVANZAR 1 HORA EN DEADLINE DAY
+  // ============================================================
+  const avanzarHoraDeadline = useCallback(() => {
+    if (!equipoUsuarioId || horasDeadline <= 0) return;
+
+    const nuevasHoras = horasDeadline - 1;
+    setHorasDeadline(nuevasHoras);
+
+    const noticiasCierre: string[] = [];
+
+    // 1. IA MAS AGRESIVA: 50% mas probable generar oferta por jugador del usuario
+    const plantelUsuario = jugadores.filter(j => j.idEquipo === equipoUsuarioId && !j.intransferible);
+    const clubsIA = equipos.filter(e => e.id !== equipoUsuarioId);
+    if (plantelUsuario.length > 0 && clubsIA.length > 0 && Math.random() < 0.45) {
+      const target = plantelUsuario[Math.floor(Math.random() * plantelUsuario.length)];
+      const comprador = clubsIA[Math.floor(Math.random() * clubsIA.length)];
+      // Oferta inflada por la desesperacion del Deadline (1.2x - 1.6x)
+      const multiplier = 1.2 + Math.random() * 0.4;
+      const monto = Math.round(target.valorMercado * multiplier);
+      if (comprador.presupuestoFichajes >= monto) {
+        setOfertaRecibidaActiva({
+          id: `dd-${Date.now()}`,
+          jugadorId: target.id,
+          jugadorNombre: target.nombre,
+          jugadorValorMercado: target.valorMercado,
+          clubCompradorId: comprador.id,
+          clubCompradorNombre: comprador.nombre,
+          clubCompradorEscudo: comprador.escudo,
+          clubCompradorReputacion: comprador.reputacion,
+          montoOfrecido: monto,
+          multiplicador: multiplier
+        });
+        noticiasCierre.push(`🚨 [DEADLINE DAY] El ${comprador.nombre} llega con una oferta DESESPERADA de ${formatearMoneda(monto)} por ${target.nombre}. ¡${nuevasHoras}h para el cierre!`);
+      }
+    }
+
+    // 2. Refrescar 1 agente disponible cada 6 horas
+    if (nuevasHoras % 6 === 0 && jugadoresAgentes.length < 8) {
+      const nuevoAgente = generarAgenteLibre(Date.now());
+      setJugadoresAgentes(prev => [...prev, nuevoAgente]);
+      noticiasCierre.push(`📞 [Agente] Un nuevo jugador sin club se ofrece al mercado con descuento del 30%. ¡Aprovechá antes del cierre!`);
+    }
+
+    // 3. Si llegamos a 0 horas -> cerrar Deadline Day
+    if (nuevasHoras === 0) {
+      // Avanzar la fecha al dia siguiente (cierre del mercado)
+      const nuevaFecha = sumarUnDia(fechaActual);
+      setFechaActual(nuevaFecha);
+      setDeadlineDayActivo(false);
+      setJugadoresAgentes([]);
+      noticiasCierre.push(`🔒 [MERCADO CERRADO] El mercado de pases ha cerrado definitivamente. No se pueden realizar mas operaciones hasta la proxima ventana.`);
+    }
+
+    // 4. Alertas de tiempo
+    if (nuevasHoras === 3) {
+      noticiasCierre.push(`🚨 ¡ULTIMAS 3 HORAS DEL MERCADO! Cualquier operacion que no se concrete ahora quedara para la proxima ventana.`);
+    }
+    if (nuevasHoras === 1) {
+      noticiasCierre.push(`⏰ ¡1 HORA PARA EL CIERRE! Es ahora o nunca. El mercado cierra en 60 minutos.`);
+    }
+
+    if (noticiasCierre.length > 0) {
+      setNoticias(prev => [...noticiasCierre, ...prev]);
+    }
+  }, [equipoUsuarioId, horasDeadline, jugadores, equipos, jugadoresAgentes, fechaActual]);
+
+  // ============================================================
+  // COMPRAR JUGADOR AGENTE (Deadline Day con descuento)
+  // ============================================================
+  const comprarJugadorAgente = useCallback((agenteId: string): { aceptado: boolean; mensaje: string } => {
+    if (!equipoUsuarioId) return { aceptado: false, mensaje: 'No hay equipo seleccionado.' };
+
+    const agente = jugadoresAgentes.find(a => a.id === agenteId);
+    if (!agente || agente.comprado) return { aceptado: false, mensaje: 'El jugador ya no está disponible.' };
+
+    const clubUsuario = equipos.find(e => e.id === equipoUsuarioId);
+    if (!clubUsuario) return { aceptado: false, mensaje: 'Error al encontrar tu club.' };
+
+    if (clubUsuario.presupuestoFichajes < agente.valorDescuento) {
+      return { aceptado: false, mensaje: `Presupuesto insuficiente. Necesitás ${formatearMoneda(agente.valorDescuento)} y tenés ${formatearMoneda(clubUsuario.presupuestoFichajes)}.` };
+    }
+
+    // Descontar presupuesto
+    setEquipos(prev => prev.map(e =>
+      e.id === equipoUsuarioId
+        ? { ...e, presupuestoFichajes: e.presupuestoFichajes - agente.valorDescuento }
+        : e
+    ));
+
+    // Agregar jugador al plantel (como Jugador completo)
+    const nuevoJugador: Jugador = {
+      id: agente.id,
+      nombre: agente.nombre,
+      posicion: agente.posicion,
+      edad: agente.edad,
+      nacionalidad: agente.nacionalidad,
+      ca: agente.ca,
+      pa: agente.pa,
+      valorMercado: agente.valorMercado,
+      salarioSemanal: agente.salarioSemanal,
+      personalidad: agente.personalidad,
+      atributos: agente.atributos,
+      idEquipo: equipoUsuarioId,
+      titular: false,
+      moral: 80,
+      formaFisica: 75,
+      lesionado: false,
+      goles: 0,
+      asistencias: 0,
+      partidosJugados: 0,
+      calificacionMedia: 0,
+      partidosSeguidosBanco: 0,
+      mesesContrato: 18
+    };
+    setJugadores(prev => [...prev, nuevoJugador]);
+
+    // Marcar como comprado en la lista de agentes
+    setJugadoresAgentes(prev => prev.map(a => a.id === agenteId ? { ...a, comprado: true } : a));
+
+    const mensaje = `¡Fichaje Express! ${agente.nombre} firma por ${clubUsuario.nombre} por ${formatearMoneda(agente.valorDescuento)} (30% desc. por Deadline Day).`;
+    setNoticias(prev => [`🤝 [DEADLINE DAY] ${mensaje}`, ...prev]);
+
+    return { aceptado: true, mensaje };
+  }, [equipoUsuarioId, jugadoresAgentes, equipos]);
  
   // Cerrar el reporte del partido disputado y avanzar automáticamente de fecha en el calendario
   const cerrarPartidoReciente = useCallback(() => {
     setPartidoReciente(null);
 
     // Avanzar la fecha y progresar jugadores
-    const { nuevaFecha, nuevosJugadores: stepJugadores, nuevasNoticias, cambioDeMes, esLunes } = ejecutarPasoDelTiempo(fechaActual, jugadores, equipoUsuarioId);
+    const enfoque = equipos.find(e => e.id === equipoUsuarioId)?.enfoqueEntrenamiento || 'Táctico';
+    const { nuevaFecha, nuevosJugadores: stepJugadores, nuevasNoticias, cambioDeMes, esLunes } = ejecutarPasoDelTiempo(fechaActual, jugadores, equipoUsuarioId, enfoque);
     
     if (esLunes) {
       procesarFinanzasSemanales(stepJugadores, nuevasNoticias);
@@ -1388,7 +2150,12 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setReporteAcademia(null);
     setPartidoEnVivo(null);
     setCharlaActiva(null);
-    setCopaCampeones(inicializarCopaCampeones(equiposIniciales, '2026-08-17'));
+    setCopaCampeones(inicializarCopa(equiposIniciales, '2026-08-17', 'champions'));
+    setCopaEuropa(inicializarCopa(equiposIniciales, '2026-08-17', 'europa'));
+    setEventoActivo(null);
+    setDeadlineDayActivo(false);
+    setHorasDeadline(24);
+    setJugadoresAgentes([]);
     setNoticias([
       '📰 Oficina de Prensa: ¡Te damos la bienvenida a tu nueva carrera! Planificá los entrenamientos y prepará tus fichajes en el mercado.'
     ]);
@@ -1462,7 +2229,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, [equipoUsuarioId]);
 
   // Comprar un jugador del mercado
-  const comprarJugador = useCallback((jugadorId: string, oferta: number) => {
+  const comprarJugador = useCallback((jugadorId: string, oferta: number, promesa?: PromesaGestion | null) => {
     if (!equipoUsuarioId) return { aceptado: false, mensaje: 'No has seleccionado un club.' };
     
     const jugador = jugadores.find(j => j.id === jugadorId);
@@ -1575,11 +2342,11 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         })
       );
 
-      // 2. Re-mapear el club del jugador comprado
+      // 2. Re-mapear el club del jugador comprado y aplicar la promesa
       setJugadores(prevJugadores =>
         prevJugadores.map(j =>
           j.id === jugadorId
-            ? { ...j, idEquipo: equipoUsuarioId, titular: false }
+            ? { ...j, idEquipo: equipoUsuarioId, titular: false, promesas: promesa ? [promesa] : (j.promesas || []) }
             : j
         )
       );
@@ -1844,6 +2611,8 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       );
     }
 
+    const jugadoresConPromesaRota: { id: string; nombre: string; nacionalidad: string; desc: string }[] = [];
+
     // Clones para mutación de moral
     let jugadoresProcesados = jugadoresActualizados.map(j => {
       if (j.idEquipo !== equipoUsuarioId) return j;
@@ -1884,8 +2653,73 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
       }
 
+      // C. Control de Promesas de Gestión (Titular Indiscutido y Penales)
+      if (jClon.promesas && jClon.promesas.length > 0) {
+        let tieneNuevaIncumplida = false;
+        let descPromesa = '';
+        jClon.promesas = jClon.promesas.map(p => {
+          if (p.tipo === 'titular_indiscutido' && p.estado !== 'Incumplida') {
+            if (jClon.titular) {
+              return { ...p, estado: 'Cumplida' };
+            } else if (!jClon.lesionado) {
+              const seguidos = jClon.partidosSeguidosBanco;
+              if (seguidos >= 3) {
+                tieneNuevaIncumplida = true;
+                descPromesa = p.descripcion;
+                return { ...p, estado: 'Incumplida' };
+              }
+            }
+          } else if (p.tipo === 'penales' && p.estado !== 'Incumplida') {
+            if (jClon.esPateadorPenales) {
+              return { ...p, estado: 'Cumplida', partidosTranscurridos: 0 };
+            } else if (jClon.titular) {
+              const tr = (p.partidosTranscurridos || 0) + 1;
+              if (tr >= 3) {
+                tieneNuevaIncumplida = true;
+                descPromesa = p.descripcion;
+                return { ...p, estado: 'Incumplida', partidosTranscurridos: tr };
+              }
+              return { ...p, estado: 'En proceso', partidosTranscurridos: tr };
+            }
+          }
+          return p;
+        });
+
+        if (tieneNuevaIncumplida) {
+          jClon.moral = 1;
+          jClon.transferidoForzado = true;
+          jugadoresConPromesaRota.push({
+            id: jClon.id,
+            nombre: jClon.nombre,
+            nacionalidad: jClon.nacionalidad,
+            desc: descPromesa
+          });
+        }
+      }
+
       return jClon;
     });
+
+    // Consecuencias de promesas rotas
+    if (jugadoresConPromesaRota.length > 0) {
+      jugadoresConPromesaRota.forEach(inc => {
+        noticiasVestuario.push(
+          `🚨 [Reunión de Vestuario] ${inc.nombre} convocó a sus compañeros furioso tras romperse la promesa: "${inc.desc}". La moral del plantel se ha visto gravemente afectada y exige su transferencia inmediata.`
+        );
+
+        jugadoresProcesados = jugadoresProcesados.map(j => {
+          if (j.idEquipo === equipoUsuarioId && j.id !== inc.id) {
+            const esCompatriota = j.nacionalidad === inc.nacionalidad;
+            const drop = esCompatriota ? 30 : 15;
+            return {
+              ...j,
+              moral: Math.max(1, j.moral - drop)
+            };
+          }
+          return j;
+        });
+      });
+    }
 
     // C. Rasgo Problemático en el banco
     const posicionProblematicos: string[] = [];
@@ -1960,18 +2794,20 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const esCopa = partidoEnVivo.tipo === 'copa';
     const partidoId = partidoEnVivo.partidoId;
     const grupoId = partidoEnVivo.grupoId;
+    const subCopa = partidoEnVivo.subtipo || 'champions';
+    const activeCopa = subCopa === 'champions' ? copaCampeones : copaEuropa;
 
     let penLocal: number | undefined = undefined;
     let penVisitante: number | undefined = undefined;
-    if (esCopa && copaCampeones && copaCampeones.faseActual !== 'grupos' && golesLocal === golesVisitante) {
+    if (esCopa && activeCopa && activeCopa.faseActual !== 'grupos' && golesLocal === golesVisitante) {
       const shoot = simularTandaPenales();
       penLocal = shoot.penLocal;
       penVisitante = shoot.penVisitante;
       eventos.push(`🏆 [Definición por Penales] ${local.nombreCorto} (${penLocal}) - (${penVisitante}) ${visitante.nombreCorto}.`);
     }
 
-    if (esCopa && copaCampeones) {
-      let copiaCopa = { ...copaCampeones };
+    if (esCopa && activeCopa) {
+      let copiaCopa = { ...activeCopa };
       if (copiaCopa.faseActual === 'grupos') {
         copiaCopa.partidosGrupos = copiaCopa.partidosGrupos.map(jg => {
           return {
@@ -2014,6 +2850,13 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           tVisitante.puntos += 3;
           tLocal.perdidos++;
         }
+      } else if (copiaCopa.faseActual === 'cuartos' && copiaCopa.cuartos) {
+        copiaCopa.cuartos.partidos = copiaCopa.cuartos.partidos.map(p => {
+          if (p.id === partidoId) {
+            return { ...p, golesLocal, golesVisitante, penalesLocal: penLocal, penalesVisitante: penVisitante, jugado: true, eventos };
+          }
+          return p;
+        });
       } else if (copiaCopa.faseActual === 'semifinales' && copiaCopa.semifinales) {
         copiaCopa.semifinales.partidos = copiaCopa.semifinales.partidos.map(p => {
           if (p.id === partidoId) {
@@ -2033,8 +2876,12 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         };
       }
 
-      const finalCopa = procesarTransicionCopa(copiaCopa);
-      setCopaCampeones(finalCopa);
+      const finalCopa = procesarTransicionCopa(copiaCopa, subCopa);
+      if (subCopa === 'champions') {
+        setCopaCampeones(finalCopa);
+      } else {
+        setCopaEuropa(finalCopa);
+      }
     }
 
     if (!esCopa) {
@@ -2412,10 +3259,97 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (b.diferenciaGoles !== a.diferenciaGoles) return b.diferenciaGoles - a.diferenciaGoles;
       return b.golesFavor - a.golesFavor;
     });
-    const clasificadosLaLiga = tablaOrdenadaLaLiga.slice(0, 4).map(t => equipos.find(e => e.id === t.idEquipo)!);
-    const nuevaCopa = inicializarCopaCampeones(equipos, nuevaFechaInicioStr, clasificadosLaLiga);
+    const clasificadosLigaUsuario = tablaOrdenadaLaLiga.map(t => equipos.find(e => e.id === t.idEquipo)!);
+    const clasificadosLaLiga = clasificadosLigaUsuario.slice(0, 4);
+    const clasificadosEuropa = clasificadosLigaUsuario.slice(4, 8);
+    const nuevaCopa = inicializarCopa(equipos, nuevaFechaInicioStr, 'champions', clasificadosLigaUsuario, liga.pais);
+    const nuevaCopaEu = inicializarCopa(equipos, nuevaFechaInicioStr, 'europa', clasificadosLigaUsuario, liga.pais);
 
-    setJugadores(jugadoresFinales);
+    // Premiar campeones y clasificados
+    const equiposActualizados = listaEquipos.map(eq => {
+      const idxInTabla = tablaOrdenadaLaLiga.findIndex(t => t.idEquipo === eq.id);
+      if (idxInTabla === 0) {
+        return {
+          ...eq,
+          presupuestoFichajes: eq.presupuestoFichajes + 25000000,
+          reputacion: Math.min(99, eq.reputacion + 5)
+        };
+      } else if (idxInTabla === 1) {
+        return {
+          ...eq,
+          presupuestoFichajes: eq.presupuestoFichajes + 15000000,
+          reputacion: Math.min(99, eq.reputacion + 3)
+        };
+      } else if (idxInTabla === 2) {
+        return {
+          ...eq,
+          presupuestoFichajes: eq.presupuestoFichajes + 10000000,
+          reputacion: Math.min(99, eq.reputacion + 2)
+        };
+      } else if (idxInTabla === 3) {
+        return {
+          ...eq,
+          presupuestoFichajes: eq.presupuestoFichajes + 5000000,
+          reputacion: Math.min(99, eq.reputacion + 1)
+        };
+      }
+      return eq;
+    });
+
+    const campeonClub = equipos.find(e => e.id === tablaOrdenadaLaLiga[0].idEquipo);
+
+    const esClasificadoCopa = [...clasificadosLaLiga, ...clasificadosEuropa].some(c => c.id === equipoUsuarioId);
+    const jugadoresConCopaRota: string[] = [];
+    let jugadoresFinalesProcesados = jugadoresFinales.map(j => {
+      if (j.idEquipo !== equipoUsuarioId) return j;
+      let jClon = { ...j };
+      if (jClon.promesas && jClon.promesas.length > 0) {
+        let tieneNuevaIncumplida = false;
+        jClon.promesas = jClon.promesas.map(p => {
+          if (p.tipo === 'copa_internacional' && p.estado === 'En proceso') {
+            if (esClasificadoCopa) {
+              return { ...p, estado: 'Cumplida' };
+            } else {
+              tieneNuevaIncumplida = true;
+              return { ...p, estado: 'Incumplida' };
+            }
+          }
+          return p;
+        });
+
+        if (tieneNuevaIncumplida) {
+          jClon.moral = 1;
+          jClon.transferidoForzado = true;
+          jugadoresConCopaRota.push(jClon.nombre);
+        }
+      }
+      return jClon;
+    });
+
+    const noticiasCopaRota: string[] = [];
+    if (jugadoresConCopaRota.length > 0) {
+      jugadoresConCopaRota.forEach(nombre => {
+        noticiasCopaRota.push(
+          `🚨 [Objetivo Roto] Tras no clasificar a la Copa de Campeones ni a la Copa Continental, ${nombre} convocó una reunión de vestuario de urgencia. Exige ser transferido de inmediato y el vestuario se ha desmotivado.`
+        );
+
+        jugadoresFinalesProcesados = jugadoresFinalesProcesados.map(j => {
+          if (j.idEquipo === equipoUsuarioId && j.nombre !== nombre) {
+            const incJugador = jugadoresFinales.find(j2 => j2.nombre === nombre);
+            const esCompatriota = incJugador && j.nacionalidad === incJugador.nacionalidad;
+            const drop = esCompatriota ? 30 : 15;
+            return {
+              ...j,
+              moral: Math.max(1, j.moral - drop)
+            };
+          }
+          return j;
+        });
+      });
+    }
+
+    setEquipos(equiposActualizados);
+    setJugadores(jugadoresFinalesProcesados);
     setFixture(nuevoFixture);
     setLiga(prevLiga => ({
       ...prevLiga,
@@ -2424,18 +3358,23 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }));
     setFechaActual(nuevaFechaActual);
     setCopaCampeones(nuevaCopa);
+    setCopaEuropa(nuevaCopaEu);
 
     setReporteAcademia({
       retirados: retiradosList,
       promovidos: promovidosList
     });
 
-    setNoticias(prev => [
+    const nuevasNoticiasCierre = [
+      `🏆 [Campeón de Liga] ¡Felicitaciones al ${campeonClub?.nombre || 'Club'} ${campeonClub?.escudo || ''} por consagrarse campeón de la temporada!`,
+      `💰 [Premios de Liga] Se han entregado los premios financieros de fin de temporada a los 4 mejores equipos.`,
       `🏁 [Fin de Temporada] Ha concluido oficialmente la temporada. ¡Bienvenido a la nueva temporada ${nuevaTemporadaName}!`,
       `📦 [Academia] Se ha publicado el Informe de la Academia con las nuevas promesas de la cantera.`,
-      `🏆 [Copa de Campeones] Se ha sorteado el fixture continental de la Copa de Campeones para la nueva temporada.`,
-      ...prev
-    ]);
+      `🏆 [Copas Internacionales] Se han sorteado los fixtures de la Copa de Campeones y la Copa Continental para la nueva temporada.`,
+      ...noticiasCopaRota
+    ];
+
+    setNoticias(prev => [...nuevasNoticiasCierre, ...prev]);
   }, [jugadores, equipos, liga, fixture]);
 
   const cerrarReporteAcademia = useCallback(() => {
@@ -2448,6 +3387,160 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       j.id === jugadorId ? { ...j, intransferible: !j.intransferible } : j
     ));
   }, []);
+
+  const establecerRolTactico = useCallback((jugadorId: string, rol: 'Hombre de Área' | 'Delantero Avanzado' | 'Pivote Defensivo' | 'Organizador' | null) => {
+    setJugadores(prev => prev.map(j =>
+      j.id === jugadorId ? { ...j, rolTactico: rol } : j
+    ));
+  }, []);
+
+  const establecerEnfoqueEntrenamiento = useCallback((enfoque: 'Físico' | 'Táctico' | 'Técnico') => {
+    if (!equipoUsuarioId) return;
+    setEquipos(prev => prev.map(e =>
+      e.id === equipoUsuarioId ? { ...e, enfoqueEntrenamiento: enfoque } : e
+    ));
+  }, [equipoUsuarioId]);
+
+  const establecerEntrenamientoIndividual = useCallback((jugadorId: string, atributo: keyof AtributosJugador | null) => {
+    setJugadores(prev => prev.map(j =>
+      j.id === jugadorId ? { ...j, entrenamientoIndividual: atributo } : j
+    ));
+  }, []);
+
+  const establecerPateadorPenales = useCallback((jugadorId: string) => {
+    setJugadores(prev => {
+      const jugador = prev.find(j => j.id === jugadorId);
+      if (!jugador) return prev;
+      return prev.map(j => {
+        if (j.idEquipo === jugador.idEquipo) {
+          return {
+            ...j,
+            esPateadorPenales: j.id === jugadorId
+          };
+        }
+        return j;
+      });
+    });
+  }, []);
+
+  const establecerPateadorTirosLibres = useCallback((jugadorId: string) => {
+    setJugadores(prev => {
+      const jugador = prev.find(j => j.id === jugadorId);
+      if (!jugador) {
+        return prev.map(j => j.idEquipo === equipoUsuarioId ? { ...j, esPateadorTirosLibres: false } : j);
+      }
+      return prev.map(j => {
+        if (j.idEquipo === jugador.idEquipo) {
+          return {
+            ...j,
+            esPateadorTirosLibres: j.id === jugadorId
+          };
+        }
+        return j;
+      });
+    });
+  }, [equipoUsuarioId]);
+
+  const establecerPateadorCorners = useCallback((jugadorId: string) => {
+    setJugadores(prev => {
+      const jugador = prev.find(j => j.id === jugadorId);
+      if (!jugador) {
+        return prev.map(j => j.idEquipo === equipoUsuarioId ? { ...j, esPateadorCorners: false } : j);
+      }
+      return prev.map(j => {
+        if (j.idEquipo === jugador.idEquipo) {
+          return {
+            ...j,
+            esPateadorCorners: j.id === jugadorId
+          };
+        }
+        return j;
+      });
+    });
+  }, [equipoUsuarioId]);
+
+  const establecerEstrategiaCorner = useCallback((estrategia: 'Atacar el primer palo' | 'Centro al área chica' | 'Jugar en corto') => {
+    if (!equipoUsuarioId) return;
+    setEquipos(prev => prev.map(e =>
+      e.id === equipoUsuarioId ? { ...e, estrategiaCorner: estrategia } : e
+    ));
+  }, [equipoUsuarioId]);
+
+  const establecerEstrategiaPases = useCallback((estrategia: 'Cortos' | 'Combinados' | 'Largos al espacio') => {
+    if (!equipoUsuarioId) return;
+    setEquipos(prev => prev.map(e =>
+      e.id === equipoUsuarioId ? { ...e, estrategiaPases: estrategia } : e
+    ));
+  }, [equipoUsuarioId]);
+
+  // ============================================================
+  // RESOLVER EVENTO ALEATORIO DE VESTUARIO
+  // ============================================================
+  const resolverEvento = useCallback((opcionId: string) => {
+    if (!eventoActivo || !equipoUsuarioId) return;
+
+    const opcion = eventoActivo.opciones.find(o => o.id === opcionId);
+    if (!opcion) return;
+
+    const efecto = opcion.efecto;
+    const jugadorProtagonistId = eventoActivo.jugadorId;
+
+    // Aplicar efectos sobre jugadores
+    setJugadores(prev => prev.map(j => {
+      if (j.idEquipo !== equipoUsuarioId) return j;
+
+      let updates: Partial<Jugador> = {};
+
+      // Efecto sobre el protagonista
+      if (jugadorProtagonistId && j.id === jugadorProtagonistId) {
+        if (efecto.jugadorMoral !== undefined) {
+          updates.moral = Math.max(1, Math.min(100, j.moral + efecto.jugadorMoral));
+        }
+        if (efecto.jugadorForma !== undefined) {
+          updates.formaFisica = Math.max(1, Math.min(100, j.formaFisica + efecto.jugadorForma));
+        }
+        if (efecto.jugadorPa !== undefined) {
+          updates.pa = Math.max(j.ca, Math.min(100, j.pa + efecto.jugadorPa));
+        }
+        if (efecto.jugadorCa !== undefined) {
+          updates.ca = Math.max(1, Math.min(j.pa, j.ca + efecto.jugadorCa));
+        }
+      }
+
+      // Efecto sobre el capitán (personalidad Líder)
+      if (efecto.moralCapitan !== undefined && j.personalidad === 'Líder') {
+        updates.moral = Math.max(1, Math.min(100, (updates.moral ?? j.moral) + efecto.moralCapitan));
+      }
+
+      // Efecto moral general del equipo
+      if (efecto.moralEquipo !== undefined) {
+        updates.moral = Math.max(1, Math.min(100, (updates.moral ?? j.moral) + efecto.moralEquipo));
+      }
+
+      return Object.keys(updates).length > 0 ? { ...j, ...updates } : j;
+    }));
+
+    // Efecto sobre presupuesto del club
+    if (efecto.presupuesto !== undefined) {
+      setEquipos(prev => prev.map(e =>
+        e.id === equipoUsuarioId
+          ? { ...e, presupuestoFichajes: e.presupuestoFichajes + efecto.presupuesto! }
+          : e
+      ));
+    }
+
+    // Efecto sobre confianza de la directiva
+    if (efecto.confianzaDirectiva !== undefined) {
+      setConfianzaDirectiva(prev => Math.max(0, Math.min(100, prev + efecto.confianzaDirectiva!)));
+    }
+
+    // Noticia informando al usuario de la resolución
+    const noticia = `🎲 [Evento Vestuario] "${eventoActivo.titulo}" — Decisión: "${opcion.texto}". ${opcion.descripcionEfecto}`;
+    setNoticias(prev => [noticia, ...prev]);
+
+    // Cerrar el evento
+    setEventoActivo(null);
+  }, [eventoActivo, equipoUsuarioId]);
 
   return (
     <GameContext.Provider
@@ -2470,6 +3563,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         partidoEnVivo,
         charlaActiva,
         copaCampeones,
+        copaEuropa,
         seleccionarEquipo,
         avanzarDia,
         actualizarJugador,
@@ -2491,7 +3585,22 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         resolverCharla,
         finalizarTemporada,
         cerrarReporteAcademia,
-        toggleIntransferible
+        toggleIntransferible,
+        establecerRolTactico,
+        establecerEnfoqueEntrenamiento,
+        establecerEntrenamientoIndividual,
+        establecerPateadorPenales,
+        establecerPateadorTirosLibres,
+        establecerPateadorCorners,
+        establecerEstrategiaCorner,
+        establecerEstrategiaPases,
+        eventoActivo,
+        resolverEvento,
+        deadlineDayActivo,
+        horasDeadline,
+        jugadoresAgentes,
+        avanzarHoraDeadline,
+        comprarJugadorAgente
       }}
     >
       {children}

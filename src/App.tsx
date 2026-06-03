@@ -12,6 +12,9 @@ import { LiveMatchView } from './views/LiveMatchView';
 import { AnaliticaView } from './views/AnaliticaView';
 import { AcademiaReportView } from './views/AcademiaReportView';
 import { CopaInternacionalView } from './views/CopaInternacionalView';
+import { EntrenamientoView } from './views/EntrenamientoView';
+import { EventoVestuarioModal } from './views/EventoVestuarioModal';
+import { DeadlineDayView } from './views/DeadlineDayView';
 
 // ==========================================
 // FORMATEADORES AUXILIARES
@@ -71,11 +74,13 @@ const AppContent: React.FC = () => {
     aceptarOfertaRecibida,
     rechazarOfertaRecibida,
     contraofertarRecibida,
-    cerrarReporteAcademia
+    cerrarReporteAcademia,
+    eventoActivo,
+    deadlineDayActivo
   } = useGame();
 
   // Estados de interfaz
-  const [vista, setVista] = useState<'dashboard' | 'plantel' | 'tabla' | 'mercado' | 'tactica' | 'analitica' | 'copa'>('dashboard');
+  const [vista, setVista] = useState<'dashboard' | 'plantel' | 'tabla' | 'mercado' | 'tactica' | 'analitica' | 'copa' | 'entrenamiento'>('dashboard');
   
   // Estados para la selección de equipos
   const [ligaSeleccionada, setLigaSeleccionada] = useState<'todas' | 'espana' | 'inglaterra' | 'italia' | 'alemania'>('todas');
@@ -104,6 +109,18 @@ const AppContent: React.FC = () => {
   const cerrarResultadoNegociacion = () => {
     setResultadoNegociacion(null);
   };
+
+  // ==========================================
+  // INTERCEPTOR: DEADLINE DAY — CIERRE DE MERCADO
+  // ==========================================
+  if (deadlineDayActivo) {
+    return (
+      <>
+        <DeadlineDayView />
+        {eventoActivo && <EventoVestuarioModal evento={eventoActivo} />}
+      </>
+    );
+  }
 
   // ==========================================
   // INTERCEPTOR: PARTIDO EN VIVO A PANTALLA COMPLETA
@@ -542,6 +559,7 @@ const AppContent: React.FC = () => {
   const jugadoresClub = jugadores.filter(j => j.idEquipo === equipoUsuario!.id);
 
   return (
+    <>
     <div className="flex h-screen bg-[#090d16] text-slate-100 font-sans overflow-hidden">
       
       {/* ==========================================
@@ -632,6 +650,16 @@ const AppContent: React.FC = () => {
               }`}
             >
               <span>📋</span> Táctica
+            </button>
+            <button
+              onClick={() => setVista('entrenamiento')}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-semibold transition-all duration-150 ${
+                vista === 'entrenamiento'
+                  ? 'bg-teal-600 text-white shadow-lg shadow-teal-700/20'
+                  : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/60'
+              }`}
+            >
+              <span>🏋️</span> Entrenamiento
             </button>
             <button
               onClick={() => setVista('tabla')}
@@ -729,6 +757,11 @@ const AppContent: React.FC = () => {
           {/* VISTA TÁCTICA (CANCHA INTERACTIVA Y CONVOCADOS) */}
           {vista === 'tactica' && (
             <TacticaView />
+          )}
+
+          {/* VISTA ENTRENAMIENTO */}
+          {vista === 'entrenamiento' && (
+            <EntrenamientoView />
           )}
 
           {/* VISTA 3: TABLA DE POSICIONES (STANDINGS DESDE COMPONENTE MODULAR) */}
@@ -1049,6 +1082,15 @@ const AppContent: React.FC = () => {
       )}
 
     </div>
+
+    {/* ==========================================
+        MODAL DE EVENTO ALEATORIO DE VESTUARIO
+        Se renderiza como overlay sobre todo el contenido
+        ========================================== */}
+    {eventoActivo && (
+      <EventoVestuarioModal evento={eventoActivo} />
+    )}
+    </>
   );
 };
 

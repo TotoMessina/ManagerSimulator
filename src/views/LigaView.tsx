@@ -94,8 +94,8 @@ export const LigaView: React.FC = () => {
                     let borderDecoracion = 'border-l-4 border-transparent';
                     if (pos === 1) {
                       borderDecoracion = 'border-l-4 border-emerald-500'; // Campeón
-                    } else if (pos <= 3) {
-                      borderDecoracion = 'border-l-4 border-blue-500'; // Clasificados Champions
+                    } else if (pos <= 4) {
+                      borderDecoracion = 'border-l-4 border-blue-500'; // Clasificados Copa de Campeones
                     }
 
                     return (
@@ -192,7 +192,7 @@ export const LigaView: React.FC = () => {
               </div>
               <div className="flex items-center gap-1.5">
                 <span className="w-1.5 h-3 bg-blue-500 rounded-full"></span>
-                <span>2° - 3°: Clasificación Champions</span>
+                <span>2° - 4°: Clasificación Copa de Campeones</span>
               </div>
             </div>
             <div className="italic">

@@ -2,6 +2,7 @@ import React from 'react';
 import { useGame } from '../context/useGame';
 import { Equipo, Jornada } from '../types';
 import { CentroDeMedios } from './CentroDeMedios';
+import { obtenerDebilidadEquipo } from '../engine/matchEngine';
 
 // Formateador de dinero
 const formatearMoneda = (valor: number): string => {
@@ -14,6 +15,7 @@ const formatearMoneda = (valor: number): string => {
 export const DashboardView: React.FC = () => {
   const {
     equipos,
+    jugadores,
     fechaActual,
     equipoUsuario,
     avanzarDia,
@@ -25,43 +27,67 @@ export const DashboardView: React.FC = () => {
     fixture,
     liga,
     finalizarTemporada,
-    copaCampeones
+    copaCampeones,
+    copaEuropa
   } = useGame();
 
-  const esFinDeTemporada = liga.tabla.length > 0 && liga.tabla[0].partidosJugados === 18;
+  const totalPartidosTemporada = (liga.tabla.length - 1) * 2;
+  const esFinDeTemporada = liga.tabla.length > 0 && liga.tabla[0].partidosJugados === totalPartidosTemporada;
 
   // --- DETECTAR PARTIDO DE COPA HOY ---
   let partidoCopaHoy: any = null;
   let grupoCopaHoyId: string | undefined = undefined;
-  
-  if (copaCampeones && equipoUsuario) {
-    if (copaCampeones.faseActual === 'grupos') {
-      const jgHoyList = copaCampeones.partidosGrupos.filter(jg => jg.fecha === fechaActual);
+  let tipoCopaHoy: 'champions' | 'europa' | null = null;
+
+  const checkCopaHoy = (copa: typeof copaCampeones, tipo: 'champions' | 'europa') => {
+    if (!copa || !equipoUsuario) return;
+    if (copa.faseActual === 'grupos') {
+      const jgHoyList = copa.partidosGrupos.filter(jg => jg.fecha === fechaActual);
       jgHoyList.forEach(jg => {
         const found = jg.partidos.find(p => p.localId === equipoUsuario.id || p.visitanteId === equipoUsuario.id);
         if (found) {
           partidoCopaHoy = found;
           grupoCopaHoyId = jg.grupoId;
+          tipoCopaHoy = tipo;
         }
       });
-    } else if (copaCampeones.faseActual === 'semifinales' && copaCampeones.semifinales && copaCampeones.semifinales.fecha === fechaActual) {
-      const found = copaCampeones.semifinales.partidos.find(p => p.localId === equipoUsuario.id || p.visitanteId === equipoUsuario.id);
+    } else if (copa.faseActual === 'cuartos' && copa.cuartos && copa.cuartos.fecha === fechaActual) {
+      const found = copa.cuartos.partidos.find(p => p.localId === equipoUsuario.id || p.visitanteId === equipoUsuario.id);
       if (found) {
         partidoCopaHoy = found;
+        tipoCopaHoy = tipo;
       }
-    } else if (copaCampeones.faseActual === 'final' && copaCampeones.final && copaCampeones.final.fecha === fechaActual) {
-      const p = copaCampeones.final.partido;
+    } else if (copa.faseActual === 'semifinales' && copa.semifinales && copa.semifinales.fecha === fechaActual) {
+      const found = copa.semifinales.partidos.find(p => p.localId === equipoUsuario.id || p.visitanteId === equipoUsuario.id);
+      if (found) {
+        partidoCopaHoy = found;
+        tipoCopaHoy = tipo;
+      }
+    } else if (copa.faseActual === 'final' && copa.final && copa.final.fecha === fechaActual) {
+      const p = copa.final.partido;
       if (p.localId === equipoUsuario.id || p.visitanteId === equipoUsuario.id) {
         partidoCopaHoy = p;
+        tipoCopaHoy = tipo;
       }
     }
+  };
+
+  checkCopaHoy(copaCampeones, 'champions');
+  if (!partidoCopaHoy) {
+    checkCopaHoy(copaEuropa, 'europa');
   }
 
-  const esDiaDeCopa = copaCampeones && (
+  const esDiaDeCopa = (copaCampeones && (
     (copaCampeones.faseActual === 'grupos' && copaCampeones.partidosGrupos.some(jg => jg.fecha === fechaActual)) ||
+    (copaCampeones.faseActual === 'cuartos' && copaCampeones.cuartos?.fecha === fechaActual) ||
     (copaCampeones.faseActual === 'semifinales' && copaCampeones.semifinales?.fecha === fechaActual) ||
     (copaCampeones.faseActual === 'final' && copaCampeones.final?.fecha === fechaActual)
-  );
+  )) || (copaEuropa && (
+    (copaEuropa.faseActual === 'grupos' && copaEuropa.partidosGrupos.some(jg => jg.fecha === fechaActual)) ||
+    (copaEuropa.faseActual === 'cuartos' && copaEuropa.cuartos?.fecha === fechaActual) ||
+    (copaEuropa.faseActual === 'semifinales' && copaEuropa.semifinales?.fecha === fechaActual) ||
+    (copaEuropa.faseActual === 'final' && copaEuropa.final?.fecha === fechaActual)
+  ));
 
   if (!equipoUsuario) return null;
 
@@ -103,6 +129,64 @@ export const DashboardView: React.FC = () => {
     const rivalId = esLocal ? partidoUsuarioHoy.visitanteId : partidoUsuarioHoy.localId;
     rivalHoy = equipos.find(e => e.id === rivalId) || null;
   }
+
+  // Identificar rival de hoy en Copa o Liga
+  let rivalDeHoy: Equipo | null = null;
+  if (jornadaHoy && rivalHoy) {
+    rivalDeHoy = rivalHoy;
+  } else if (partidoCopaHoy) {
+    const esLocalCopa = partidoCopaHoy.localId === equipoUsuario.id;
+    const rivalId = esLocalCopa ? partidoCopaHoy.visitanteId : partidoCopaHoy.localId;
+    rivalDeHoy = equipos.find(e => e.id === rivalId) || null;
+  }
+
+  // Identificar rival futuro si no hay partido hoy
+  let proximoRival: Equipo | null = null;
+  if (!jornadaHoy && !partidoCopaHoy && proximaJornada) {
+    const partFut = proximaJornada.partidos.find(p => p.localId === equipoUsuario.id || p.visitanteId === equipoUsuario.id);
+    if (partFut) {
+      const rivalId = partFut.localId === equipoUsuario.id ? partFut.visitanteId : partFut.localId;
+      proximoRival = equipos.find(e => e.id === rivalId) || null;
+    }
+  }
+
+  const rivalParaReporte = rivalDeHoy || proximoRival;
+
+  const generarReporteRival = (rival: Equipo) => {
+    const debilidad = obtenerDebilidadEquipo(rival.id, jugadores);
+    
+    let focoAtaque = "un 55% combinando transiciones rápidas";
+    if (rival.formacion === '4-3-3' || rival.formacion === '3-5-2') {
+      focoAtaque = "un 70% por las bandas buscando desborde";
+    } else if (rival.formacion === '4-4-2') {
+      focoAtaque = "un 60% por el centro con pases directos";
+    } else if (rival.formacion === '5-3-2') {
+      focoAtaque = "un 65% replegado apostando al contraataque";
+    }
+
+    const estilo = rival.estiloJuego || 'Equilibrado';
+
+    let debilidadTexto = "";
+    let recomendacion = "";
+    if (debilidad === 'centrales_lentos') {
+      debilidadTexto = "la lentitud de sus defensores centrales";
+      recomendacion = "Configurá Tácticas de pases 'Largos al espacio' y córners 'Atacar el primer palo' en Táctica para obtener un bonus del +20% de efectividad de ataque.";
+    } else if (debilidad === 'debilidad_aerea') {
+      debilidadTexto = "su debilidad defensiva en el juego aéreo";
+      recomendacion = "Alineá delanteros con buen juego aéreo y priorizá centros al área chica.";
+    } else {
+      debilidadTexto = "los espacios a espaldas de sus laterales cuando se proyectan";
+      recomendacion = "Priorizá jugar con extremos rápidos que aprovechen las bandas.";
+    }
+
+    return {
+      focoAtaque,
+      estilo,
+      debilidadTexto,
+      recomendacion,
+      debilidad
+    };
+  };
 
   return (
     <div className="space-y-6">
@@ -250,7 +334,11 @@ export const DashboardView: React.FC = () => {
               <div>
                 <h3 className="text-lg font-bold text-white mb-2 flex items-center gap-2 border-b border-slate-800 pb-2">
                   ⚽ {partidoCopaHoy 
-                    ? `Copa de Campeones · ${copaCampeones?.faseActual === 'grupos' ? `Grupo ${grupoCopaHoyId}` : copaCampeones?.faseActual === 'semifinales' ? 'Semifinal' : 'Gran Final'}`
+                    ? `${tipoCopaHoy === 'champions' ? 'Copa de Campeones' : 'Copa Continental'} · ${
+                        (tipoCopaHoy === 'champions' ? copaCampeones : copaEuropa)!.faseActual === 'grupos' ? `Grupo ${grupoCopaHoyId}` :
+                        (tipoCopaHoy === 'champions' ? copaCampeones : copaEuropa)!.faseActual === 'cuartos' ? 'Cuartos de Final' :
+                        (tipoCopaHoy === 'champions' ? copaCampeones : copaEuropa)!.faseActual === 'semifinales' ? 'Semifinal' : 'Gran Final'
+                      }`
                     : esDiaDeCopa 
                       ? 'Jornada Continental de Copa' 
                       : jornadaHoy 
@@ -304,12 +392,12 @@ export const DashboardView: React.FC = () => {
                   </div>
                 ) : esDiaDeCopa ? (
                   <div className="mt-4 p-5 bg-slate-950/60 border border-slate-800/80 border-dashed rounded-xl space-y-3">
-                    <p className="text-xs text-slate-450 leading-relaxed">
-                      Hoy se disputan encuentros de la Copa de Campeones. Tu equipo no tiene compromisos continentales para esta fecha, por lo que el plantel continuará con rutinas de entrenamiento táctico en el complejo.
+                    <p className="text-xs text-slate-400 leading-relaxed">
+                      Hoy se disputan encuentros de las Copas Internacionales. Tu equipo no tiene compromisos continentales para esta fecha, por lo que el plantel continuará con rutinas de entrenamiento táctico en el complejo.
                     </p>
                     <div className="text-xs text-indigo-400 font-bold flex items-center gap-1.5">
-                      <span>🏆 Torneo Continental:</span>
-                      <span className="font-semibold text-slate-300">Fase de {copaCampeones?.faseActual === 'grupos' ? 'Grupos' : copaCampeones?.faseActual === 'semifinales' ? 'Semifinales' : 'Final'}</span>
+                      <span>🏆 Torneos Continentales:</span>
+                      <span className="font-semibold text-slate-300">Fase de Grupos o Eliminatorias en progreso</span>
                     </div>
                   </div>
                 ) : jornadaHoy && rivalHoy ? (
@@ -359,6 +447,32 @@ export const DashboardView: React.FC = () => {
                     </div>
                   </div>
                 )}
+
+                {/* INFORME DE SCOUTING DEL RIVAL */}
+                {rivalParaReporte && (
+                  <div className="mt-4 p-4 rounded-xl border border-slate-800/80 bg-slate-950/60 shadow-lg text-left relative overflow-hidden">
+                    <div className="absolute top-0 right-0 w-32 h-full bg-gradient-to-l from-teal-500/5 to-transparent pointer-events-none" />
+                    <h4 className="text-[10px] font-black uppercase text-teal-400 tracking-wider flex items-center gap-1.5 mb-2">
+                      📋 Informe del Rival (Analista de Scouting)
+                    </h4>
+                    {(() => {
+                      const { focoAtaque, estilo, debilidadTexto, recomendacion } = generarReporteRival(rivalParaReporte);
+                      return (
+                        <>
+                          <p className="text-xs text-slate-350 leading-relaxed">
+                            El analista reporta: El <strong className="text-slate-200">{rivalParaReporte.nombre}</strong> ataca {focoAtaque} usando un estilo <strong className="text-slate-200">{estilo}</strong> y su punto débil es <strong className="text-teal-300 font-bold">{debilidadTexto}</strong>.
+                          </p>
+                          <div className="text-[10px] text-slate-500 border-t border-slate-800/80 mt-2.5 pt-2 flex items-start gap-1">
+                            <span className="text-teal-400">💡</span>
+                            <span>
+                              <strong>Recomendación:</strong> {recomendacion}
+                            </span>
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </div>
+                )}
               </div>
 
               {/* Gran Botón de Acción Principal */}
@@ -373,9 +487,13 @@ export const DashboardView: React.FC = () => {
                 ) : partidoCopaHoy ? (
                   <button
                     onClick={avanzarDia}
-                    className="w-full sm:w-auto px-8 py-4 bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-700 hover:from-indigo-500 hover:to-purple-500 text-white font-extrabold text-sm uppercase tracking-widest rounded-xl shadow-lg shadow-indigo-500/30 active:scale-[0.98] transform transition-all duration-200 animate-pulse border border-indigo-500/20"
+                    className={`w-full sm:w-auto px-8 py-4 bg-gradient-to-r ${
+                      tipoCopaHoy === 'champions' 
+                        ? 'from-indigo-600 via-purple-600 to-indigo-700 hover:from-indigo-500 hover:to-purple-500 shadow-indigo-500/30 border-indigo-500/20' 
+                        : 'from-blue-600 via-cyan-600 to-blue-700 hover:from-blue-500 hover:to-cyan-500 shadow-blue-500/30 border-blue-500/20'
+                    } text-white font-extrabold text-sm uppercase tracking-widest rounded-xl shadow-lg active:scale-[0.98] transform transition-all duration-200 animate-pulse border`}
                   >
-                    🏆 Jugar Copa de Campeones
+                    🏆 Jugar {tipoCopaHoy === 'champions' ? 'Copa de Campeones' : 'Copa Continental'}
                   </button>
                 ) : esDiaDeCopa ? (
                   <button

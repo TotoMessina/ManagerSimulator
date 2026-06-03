@@ -121,10 +121,60 @@ export const TacticaView: React.FC = () => {
     toggleTitular,
     actualizarPosicionesTacticas,
     actualizarTactica,
+    establecerRolTactico,
+    establecerPateadorPenales,
+    establecerPateadorTirosLibres,
+    establecerPateadorCorners,
+    establecerEstrategiaCorner,
+    establecerEstrategiaPases,
   } = useGame();
 
   const [criterioOrden, setCriterioOrden] = useState<CriterioOrden>('ca');
   const [direccionOrden, setDireccionOrden] = useState<DireccionOrden>('DESC');
+
+  // --- ESTADOS Y MANEJADORES DE ROLES TÁCTICOS (CLIC DERECHO / PULSACIÓN LARGA) ---
+  const [menuRolJugador, setMenuRolJugador] = useState<{ jugador: Jugador; x: number; y: number } | null>(null);
+  const touchTimeoutRef = useRef<number | null>(null);
+
+  const handleContextMenu = (e: React.MouseEvent, j: Jugador) => {
+    e.preventDefault();
+    setMenuRolJugador({
+      jugador: j,
+      x: e.clientX,
+      y: e.clientY
+    });
+  };
+
+  const handleTouchStart = (e: React.TouchEvent, j: Jugador) => {
+    const touch = e.touches[0];
+    const clientX = touch.clientX;
+    const clientY = touch.clientY;
+    
+    if (touchTimeoutRef.current) window.clearTimeout(touchTimeoutRef.current);
+    
+    touchTimeoutRef.current = window.setTimeout(() => {
+      e.preventDefault();
+      setMenuRolJugador({
+        jugador: j,
+        x: clientX,
+        y: clientY
+      });
+    }, 600);
+  };
+
+  const handleTouchEnd = () => {
+    if (touchTimeoutRef.current) {
+      window.clearTimeout(touchTimeoutRef.current);
+      touchTimeoutRef.current = null;
+    }
+  };
+
+  // Cerrar el menú con cualquier clic regular
+  useEffect(() => {
+    const closeMenu = () => setMenuRolJugador(null);
+    document.addEventListener('click', closeMenu);
+    return () => document.removeEventListener('click', closeMenu);
+  }, []);
 
   if (!equipoUsuario) {
     return (
@@ -421,6 +471,9 @@ export const TacticaView: React.FC = () => {
           <div
             draggable
             onDragStart={e => handleDragStart(jugador.id, e)}
+            onContextMenu={e => handleContextMenu(e, jugador)}
+            onTouchStart={e => handleTouchStart(e, jugador)}
+            onTouchEnd={handleTouchEnd}
             className={`
               relative group flex flex-col items-center cursor-grab active:cursor-grabbing
               ${isOver ? 'scale-110' : 'hover:scale-105'}
@@ -443,6 +496,30 @@ export const TacticaView: React.FC = () => {
             <span className="mt-1.5 text-[9px] font-bold text-white bg-slate-950/90 backdrop-blur-sm px-2 py-0.5 rounded border border-slate-800 max-w-[72px] truncate text-center leading-none shadow z-10">
               {jugador.nombre.split(' ').slice(-1)[0]}
             </span>
+            {/* Rol táctico si tiene asignado */}
+            {jugador.rolTactico && (
+              <span className="mt-1 text-[7px] font-black text-teal-400 bg-slate-950/95 px-1 py-0.5 rounded border border-teal-500/20 max-w-[72px] truncate text-center leading-none shadow z-10 uppercase tracking-widest">
+                {jugador.rolTactico}
+              </span>
+            )}
+            {/* Pateador de penales */}
+            {jugador.esPateadorPenales && (
+              <span className="mt-0.5 text-[7px] font-black text-amber-400 bg-slate-950/95 px-1 py-0.5 rounded border border-amber-500/20 max-w-[72px] truncate text-center leading-none shadow z-10 uppercase tracking-widest">
+                🎯 Penales
+              </span>
+            )}
+            {/* Pateador de tiros libres */}
+            {jugador.esPateadorTirosLibres && (
+              <span className="mt-0.5 text-[7px] font-black text-blue-400 bg-slate-950/95 px-1 py-0.5 rounded border border-blue-500/20 max-w-[72px] truncate text-center leading-none shadow z-10 uppercase tracking-widest">
+                ☄️ Libres
+              </span>
+            )}
+            {/* Pateador de corners */}
+            {jugador.esPateadorCorners && (
+              <span className="mt-0.5 text-[7px] font-black text-emerald-400 bg-slate-950/95 px-1 py-0.5 rounded border border-emerald-500/20 max-w-[72px] truncate text-center leading-none shadow z-10 uppercase tracking-widest">
+                📐 Córner
+              </span>
+            )}
             {/* Forma */}
             <div className={`mt-0.5 h-0.5 w-8 rounded-full ${jugador.formaFisica > 80 ? 'bg-teal-400' : jugador.formaFisica > 60 ? 'bg-amber-400' : 'bg-rose-400'}`} style={{ width: `${(jugador.formaFisica / 100) * 48}px` }} />
           </div>
@@ -481,7 +558,7 @@ export const TacticaView: React.FC = () => {
   // RENDER PRINCIPAL
   // ============================================================
   return (
-    <div className="space-y-5">
+    <div className="space-y-5 relative">
 
       {/* ── CABECERA ─────────────────────────────────────── */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl relative overflow-hidden">
@@ -496,7 +573,7 @@ export const TacticaView: React.FC = () => {
               </span>
             </h2>
             <p className="text-[11px] text-slate-500 mt-1">
-              Arrastrá jugadores desde el banco hacia los nodos de la cancha para armar tu once ideal.
+              Arrastrá jugadores desde el banco hacia la cancha. Click derecho o mantener presionado un titular para asignarle un Rol Táctico.
             </p>
           </div>
 
@@ -524,7 +601,7 @@ export const TacticaView: React.FC = () => {
                   <button
                     key={estilo}
                     onClick={() => handleEstiloChange(estilo)}
-                    className={`px-3 py-1.5 rounded-md text-[10px] font-extrabold transition-all uppercase tracking-wide ${
+                    className={`` + `px-3 py-1.5 rounded-md text-[10px] font-extrabold transition-all uppercase tracking-wide ${
                       estiloJuegoActivo === estilo
                         ? 'bg-teal-600 text-white shadow'
                         : 'text-slate-500 hover:text-slate-300'
@@ -547,6 +624,126 @@ export const TacticaView: React.FC = () => {
             {estiloJuegoActivo === 'Equilibrado' && <>Sin modificadores — Estadísticas base puras</>}
           </span>
         </div>
+      </div>
+
+      {/* ── PANEL DE ESTRATEGIA Y BALÓN PARADO ───────────────── */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl relative overflow-hidden">
+        <h3 className="text-sm font-extrabold text-slate-200 uppercase tracking-wider mb-4 flex items-center gap-2">
+          ⚙️ Estrategia de Juego y Balón Parado
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+          {/* Pateador de Penales */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[10px] uppercase font-extrabold text-slate-500 tracking-wider">
+              🎯 Pateador de Penales
+            </label>
+            <select
+              value={jugadoresClub.find(j => j.esPateadorPenales)?.id || ''}
+              onChange={(e) => establecerPateadorPenales(e.target.value)}
+              className="bg-slate-950 border border-slate-850 text-slate-200 border-slate-800 rounded-lg px-3 py-2 text-xs font-bold focus:outline-none focus:border-teal-500 transition-colors w-full"
+            >
+              <option value="">Seleccionar pateador...</option>
+              {jugadoresClub
+                .filter(j => j.titular && !j.lesionado)
+                .map(j => (
+                  <option key={j.id} value={j.id}>
+                    {j.nombre} ({j.posicion})
+                  </option>
+                ))}
+            </select>
+          </div>
+
+          {/* Pateador de Tiros Libres */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[10px] uppercase font-extrabold text-slate-500 tracking-wider flex items-center gap-1">
+              ☄️ Tiros Libres
+            </label>
+            <select
+              value={jugadoresClub.find(j => j.esPateadorTirosLibres)?.id || ''}
+              onChange={(e) => establecerPateadorTirosLibres(e.target.value)}
+              className="bg-slate-950 border border-slate-850 text-slate-200 border-slate-800 rounded-lg px-3 py-2 text-xs font-bold focus:outline-none focus:border-teal-500 transition-colors w-full"
+            >
+              <option value="">Seleccionar pateador...</option>
+              {jugadoresClub
+                .filter(j => j.titular && !j.lesionado)
+                .map(j => (
+                  <option key={j.id} value={j.id}>
+                    {j.nombre} ({j.posicion})
+                  </option>
+                ))}
+            </select>
+          </div>
+
+          {/* Pateador de Córners */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[10px] uppercase font-extrabold text-slate-500 tracking-wider flex items-center gap-1">
+              📐 Lanzador de Córners
+            </label>
+            <select
+              value={jugadoresClub.find(j => j.esPateadorCorners)?.id || ''}
+              onChange={(e) => establecerPateadorCorners(e.target.value)}
+              className="bg-slate-950 border border-slate-850 text-slate-200 border-slate-800 rounded-lg px-3 py-2 text-xs font-bold focus:outline-none focus:border-teal-500 transition-colors w-full"
+            >
+              <option value="">Seleccionar lanzador...</option>
+              {jugadoresClub
+                .filter(j => j.titular && !j.lesionado)
+                .map(j => (
+                  <option key={j.id} value={j.id}>
+                    {j.nombre} ({j.posicion})
+                  </option>
+                ))}
+            </select>
+          </div>
+
+          {/* Estrategia de Córner */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[10px] uppercase font-extrabold text-slate-500 tracking-wider">
+              🚩 Estrategia de Córner
+            </label>
+            <select
+              value={equipoUsuario.estrategiaCorner || 'Centro al área chica'}
+              onChange={(e) => establecerEstrategiaCorner(e.target.value as any)}
+              className="bg-slate-950 border border-slate-850 text-slate-200 border-slate-800 rounded-lg px-3 py-2 text-xs font-bold focus:outline-none focus:border-teal-500 transition-colors w-full"
+            >
+              <option value="Centro al área chica">Centro al área chica</option>
+              <option value="Atacar el primer palo">Atacar el primer palo (vs Lentos)</option>
+              <option value="Jugar en corto">Jugar en corto</option>
+            </select>
+          </div>
+
+          {/* Estrategia de Pases */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[10px] uppercase font-extrabold text-slate-500 tracking-wider">
+              👟 Estrategia de Pases
+            </label>
+            <select
+              value={equipoUsuario.estrategiaPases || 'Combinados'}
+              onChange={(e) => establecerEstrategiaPases(e.target.value as any)}
+              className="bg-slate-950 border border-slate-855 text-slate-200 border-slate-800 rounded-lg px-3 py-2 text-xs font-bold focus:outline-none focus:border-teal-500 transition-colors w-full"
+            >
+              <option value="Combinados">Combinados</option>
+              <option value="Cortos">Cortos</option>
+              <option value="Largos al espacio">Largos al espacio (vs Lentos)</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Info/Warning/Success alert if tactical bonus criteria is met */}
+        {equipoUsuario.estrategiaPases === 'Largos al espacio' && equipoUsuario.estrategiaCorner === 'Atacar el primer palo' ? (
+          <div className="mt-4 text-[11px] text-teal-400 bg-teal-950/20 border border-teal-800/30 rounded-xl px-4 py-2.5 flex items-center gap-2">
+            <span>🔥</span>
+            <span>
+              <strong>Estrategia de Contraofensiva lista:</strong> Si el rival tiene centrales lentos, obtendrás un <strong>+20% de efectividad de ataque</strong> en el partido.
+            </span>
+          </div>
+        ) : (
+          <div className="mt-4 text-[11px] text-slate-400 bg-slate-950/40 border border-slate-800/50 rounded-xl px-4 py-2.5 flex items-center gap-2">
+            <span>💡</span>
+            <span>
+              Combina <strong>Pases: Largos al espacio</strong> y <strong>Córner: Atacar el primer palo</strong> para explotar centrales lentos (+20% efectividad).
+            </span>
+          </div>
+        )}
       </div>
 
       {/* ── LAYOUT PRINCIPAL: BANCO (IZQ) + CANCHA (DER) ────── */}
@@ -796,6 +993,103 @@ export const TacticaView: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* ==========================================
+          MENÚ CONTEXTUAL DE ROLES TÁCTICOS
+          ========================================== */}
+      {menuRolJugador && (
+        <div
+          className="fixed z-55 bg-slate-950/95 border border-slate-850 rounded-xl shadow-2xl p-2 w-52 text-left animate-scale-in"
+          style={{ top: menuRolJugador.y, left: menuRolJugador.x }}
+        >
+          <div className="px-3 py-1.5 text-[9px] uppercase font-black text-slate-500 border-b border-slate-850 flex justify-between items-center mb-1">
+            <span>Asignar Rol</span>
+            <span className="font-extrabold text-[10px] text-teal-400">{menuRolJugador.jugador.nombre.split(' ').slice(-1)[0]}</span>
+          </div>
+
+          {/* Delantero roles */}
+          {categorizarPosicion(menuRolJugador.jugador.posicion) === 'DEL' && (
+            <div className="space-y-0.5">
+              <button
+                onClick={() => establecerRolTactico(menuRolJugador.jugador.id, 'Hombre de Área')}
+                className={`w-full px-2.5 py-1.5 text-xs text-left rounded-lg transition-all flex flex-col ${
+                  menuRolJugador.jugador.rolTactico === 'Hombre de Área'
+                    ? 'bg-teal-650 text-white font-bold'
+                    : 'text-slate-300 hover:bg-slate-850 hover:text-white'
+                }`}
+              >
+                <span>Hombre de Área</span>
+                <span className="text-[8px] text-slate-500 group-hover:text-slate-300 font-medium">+3 Remate | -3 Velocidad</span>
+              </button>
+              <button
+                onClick={() => establecerRolTactico(menuRolJugador.jugador.id, 'Delantero Avanzado')}
+                className={`w-full px-2.5 py-1.5 text-xs text-left rounded-lg transition-all flex flex-col mt-0.5 ${
+                  menuRolJugador.jugador.rolTactico === 'Delantero Avanzado'
+                    ? 'bg-teal-655 text-white font-bold'
+                    : 'text-slate-300 hover:bg-slate-855 hover:text-white'
+                }`}
+              >
+                <span>Delantero Avanzado</span>
+                <span className="text-[8px] text-slate-500 group-hover:text-slate-300 font-medium">+3 Velocidad</span>
+              </button>
+            </div>
+          )}
+
+          {/* Mediocampista roles */}
+          {categorizarPosicion(menuRolJugador.jugador.posicion) === 'MED' && (
+            <div className="space-y-0.5">
+              <button
+                onClick={() => establecerRolTactico(menuRolJugador.jugador.id, 'Pivote Defensivo')}
+                className={`w-full px-2.5 py-1.5 text-xs text-left rounded-lg transition-all flex flex-col ${
+                  menuRolJugador.jugador.rolTactico === 'Pivote Defensivo'
+                    ? 'bg-teal-650 text-white font-bold'
+                    : 'text-slate-300 hover:bg-slate-850 hover:text-white'
+                }`}
+              >
+                <span>Pivote Defensivo</span>
+                <span className="text-[8px] text-slate-500 group-hover:text-slate-300 font-medium">+3 Defensa</span>
+              </button>
+              <button
+                onClick={() => establecerRolTactico(menuRolJugador.jugador.id, 'Organizador')}
+                className={`w-full px-2.5 py-1.5 text-xs text-left rounded-lg transition-all flex flex-col mt-0.5 ${
+                  menuRolJugador.jugador.rolTactico === 'Organizador'
+                    ? 'bg-teal-650 text-white font-bold'
+                    : 'text-slate-300 hover:bg-slate-850 hover:text-white'
+                }`}
+              >
+                <span>Organizador</span>
+                <span className="text-[8px] text-slate-500 group-hover:text-slate-300 font-medium">+3 Pase | +3 Visión</span>
+              </button>
+            </div>
+          )}
+
+          {/* Opción Pateador de Penales */}
+          <button
+            onClick={() => establecerPateadorPenales(menuRolJugador.jugador.id)}
+            className={`w-full px-2.5 py-1.5 text-xs text-left rounded-lg transition-all flex flex-col mt-0.5 border-t border-slate-850/30 pt-1.5 ${
+              menuRolJugador.jugador.esPateadorPenales
+                ? 'bg-amber-600/20 text-amber-300 font-bold border border-amber-500/20'
+                : 'text-slate-350 hover:bg-slate-850 hover:text-white'
+            }`}
+          >
+            <div className="flex items-center gap-1.5">
+              <span>🎯</span>
+              <span>Pateador de Penales</span>
+            </div>
+            <span className="text-[8px] text-slate-500 font-medium">Asignar tiro principal desde los 12 pasos</span>
+          </button>
+
+          {/* Opción Limpiar Rol */}
+          <button
+            onClick={() => establecerRolTactico(menuRolJugador.jugador.id, null)}
+            className="w-full px-2.5 py-1.5 text-xs text-left rounded-lg text-rose-450 hover:bg-rose-955/20 hover:text-rose-350 transition-colors mt-1.5 pt-2 border-t border-slate-850 flex justify-between items-center"
+          >
+            <span>Quitar Rol</span>
+            <span>✕</span>
+          </button>
+        </div>
+      )}
+
     </div>
   );
 };

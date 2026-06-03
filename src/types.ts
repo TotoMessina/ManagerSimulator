@@ -35,6 +35,14 @@ export interface AtributosJugador {
 
 export type PersonalidadJugador = 'Líder' | 'Ambicioso' | 'Profesional' | 'Problemático' | 'Leal';
 
+export interface PromesaGestion {
+  id: string;
+  descripcion: string;
+  tipo: 'penales' | 'copa_internacional' | 'titular_indiscutido';
+  estado: 'Cumplida' | 'En proceso' | 'Incumplida';
+  partidosTranscurridos?: number;
+}
+
 export interface CharlaJugador {
   jugadorId: string;
   jugadorNombre: string;
@@ -54,6 +62,12 @@ export interface Jugador {
   promesaMinutosActive?: boolean;   // Control de promesas de minutos del DT
   transferidoForzado?: boolean;     // Control para forzar oferta de transferencia de la IA
   intransferible?: boolean;          // Marcado manualmente como no vendible por el DT
+  rolTactico?: 'Hombre de Área' | 'Delantero Avanzado' | 'Pivote Defensivo' | 'Organizador' | null;
+  entrenamientoIndividual?: keyof AtributosJugador | null;
+  esPateadorPenales?: boolean;
+  esPateadorTirosLibres?: boolean;
+  esPateadorCorners?: boolean;
+  promesas?: PromesaGestion[];
   
   // Calidad (1-100)
   ca: number; // Calidad Actual (Current Ability)
@@ -98,6 +112,9 @@ export interface Equipo {
   capacidadEstadio: number;
   formacion?: Formacion; // Táctica activa (ej. '4-3-3')
   estiloJuego?: EstiloJuego; // Estilo táctico (ej. 'Ofensivo')
+  enfoqueEntrenamiento?: 'Físico' | 'Táctico' | 'Técnico';
+  estrategiaCorner?: 'Atacar el primer palo' | 'Centro al área chica' | 'Jugar en corto';
+  estrategiaPases?: 'Cortos' | 'Combinados' | 'Largos al espacio';
 }
 
 export interface TablaEquipo {
@@ -198,16 +215,84 @@ export interface GrupoCopa {
   tabla: TablaCopa[];
 }
 
+// ==========================================
+// EVENTOS ALEATORIOS DE VESTUARIO
+// ==========================================
+
+export type TipoEvento =
+  | 'indisciplina'
+  | 'presion_familiar'
+  | 'conflicto_interno'
+  | 'peticion_salarial'
+  | 'critica_publica'
+  | 'lesion_entrenamiento'
+  | 'reclamo_capitania';
+
+export interface EfectoOpcionEvento {
+  // Efectos sobre un jugador específico (por jugadorId resuelto en tiempo de ejecución)
+  jugadorMoral?: number;        // +/- moral del jugador protagonista
+  jugadorForma?: number;        // +/- formaFisica del jugador protagonista
+  jugadorPa?: number;           // +/- PA del jugador protagonista
+  jugadorCa?: number;           // +/- CA del jugador protagonista
+  // Efectos sobre el equipo / club
+  moralEquipo?: number;         // +/- moral de todos los jugadores del equipo
+  moralCapitan?: number;        // +/- moral del jugador con personalidad 'Líder'
+  presupuesto?: number;         // +/- presupuesto de fichajes (en euros)
+  confianzaDirectiva?: number;  // +/- confianza con la directiva
+}
+
+export interface OpcionEvento {
+  id: string;
+  icono: string;
+  texto: string;                // Acción breve (ej: "Sancionar económicamente")
+  descripcionEfecto: string;    // Texto descriptivo del efecto (ej: "Baja moral -20, sube disciplina del club")
+  efecto: EfectoOpcionEvento;
+}
+
+export interface EventoVestuario {
+  id: string;
+  tipo: TipoEvento;
+  titulo: string;
+  descripcion: string;          // Narrativa completa de la situación
+  jugadorId: string | null;     // ID del jugador protagonista (null si es genérico)
+  jugadorNombre: string | null; // Nombre del protagonista para mostrar en UI
+  opciones: OpcionEvento[];     // Exactamente 3 opciones
+}
+
+// ==========================================
+// DEADLINE DAY — CIERRE DE MERCADO
+// ==========================================
+
+export interface JugadorAgente {
+  id: string;
+  nombre: string;
+  posicion: Posicion;
+  edad: number;
+  nacionalidad: string;
+  ca: number;
+  pa: number;
+  valorMercado: number;
+  valorDescuento: number;        // 70% del valorMercado (30% de descuento)
+  personalidad: PersonalidadJugador;
+  atributos: AtributosJugador;
+  salarioSemanal: number;
+  comprado: boolean;
+}
+
 export interface CopaCampeones {
   participantes: string[];
   grupos: GrupoCopa[];
-  faseActual: 'grupos' | 'semifinales' | 'final' | 'finalizada';
+  faseActual: 'grupos' | 'cuartos' | 'semifinales' | 'final' | 'finalizada';
   partidosGrupos: {
     jornada: number;
     fecha: string;
     grupoId: string;
     partidos: PartidoCopa[];
   }[];
+  cuartos: {
+    fecha: string;
+    partidos: PartidoCopa[];
+  } | null;
   semifinales: {
     fecha: string;
     partidos: PartidoCopa[];
