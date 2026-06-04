@@ -1,12 +1,20 @@
 import React, { useState } from 'react';
 import { useGame } from '../context/useGame';
 import { Jugador, AtributosJugador } from '../types';
+import { obtenerCategoriaPosicion } from '../engine/matchEngine';
 
 const formatearMoneda = (valor: number): string => {
   if (valor >= 1000000) {
     return `${(valor / 1000000).toFixed(1)} M€`;
   }
   return `${(valor / 1000).toFixed(0)} m€`;
+};
+
+const sonPersonalidadesChocantes = (p1: string, p2: string): boolean => {
+  return (
+    (p1 === 'Problemático' && ['Profesional', 'Líder', 'Leal', 'Ambicioso'].includes(p2)) ||
+    (p2 === 'Problemático' && ['Profesional', 'Líder', 'Leal', 'Ambicioso'].includes(p1))
+  );
 };
 
 export const EntrenamientoView: React.FC = () => {
@@ -17,10 +25,14 @@ export const EntrenamientoView: React.FC = () => {
     establecerEntrenamientoIndividual,
     equipoUsuarioId,
     darCharlaMotivacional,
-    organizarActividadCohesion
+    organizarActividadCohesion,
+    iniciarTutoria
   } = useGame();
 
-  const [tabActiva, setTabActiva] = useState<'general' | 'individual' | 'vestuario'>('general');
+  const [tabActiva, setTabActiva] = useState<'general' | 'individual' | 'vestuario' | 'tutorias'>('general');
+  const [mentorId, setMentorId] = useState<string>('');
+  const [apprenticeId, setApprenticeId] = useState<string>('');
+  const [notificacion, setNotificacion] = useState<{ tipo: 'success' | 'error'; mensaje: string } | null>(null);
 
   if (!equipoUsuario) return null;
 
@@ -88,7 +100,7 @@ export const EntrenamientoView: React.FC = () => {
       </div>
 
       {/* Tabs de navegación */}
-      <div className="flex gap-2 border-b border-slate-800 bg-slate-950/20 p-1 rounded-xl">
+      <div className="flex gap-2 border-b border-slate-800 bg-slate-950/20 p-1 rounded-xl flex-wrap">
         <button
           onClick={() => setTabActiva('general')}
           className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-xs font-extrabold uppercase tracking-wider transition-all duration-150 ${
@@ -118,6 +130,16 @@ export const EntrenamientoView: React.FC = () => {
           }`}
         >
           🤝 Química del Vestuario
+        </button>
+        <button
+          onClick={() => setTabActiva('tutorias')}
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-xs font-extrabold uppercase tracking-wider transition-all duration-150 ${
+            tabActiva === 'tutorias'
+              ? 'bg-slate-900 border border-slate-800 text-teal-400 font-black shadow-md'
+              : 'text-slate-500 hover:text-slate-300'
+          }`}
+        >
+          🎓 Tutorías y Mentoreo
         </button>
       </div>
 
@@ -642,6 +664,338 @@ export const EntrenamientoView: React.FC = () => {
                 </button>
               </div>
 
+            </div>
+          </div>
+        </div>
+      ) : tabActiva === 'tutorias' ? (
+        <div className="space-y-6">
+          {/* Notificación Inline */}
+          {notificacion && (
+            <div className={`p-4 rounded-xl border flex justify-between items-center text-xs font-semibold ${
+              notificacion.tipo === 'success' 
+                ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' 
+                : 'bg-rose-500/10 border-rose-500/20 text-rose-400'
+            }`}>
+              <span>{notificacion.mensaje}</span>
+              <button onClick={() => setNotificacion(null)} className="text-slate-400 hover:text-white px-2 py-1 font-bold">✕</button>
+            </div>
+          )}
+
+          {/* Tarjeta Informativa de Tutorías */}
+          <div className="bg-slate-900/40 border border-slate-850 p-6 rounded-2xl shadow-lg backdrop-blur-md">
+            <h2 className="text-lg font-bold text-white mb-2">🎓 Tutorías y Mentoreo de Jugadores</h2>
+            <p className="text-xs text-slate-400 leading-relaxed max-w-4xl">
+              Fomentá la transmisión de experiencia en el vestuario. Emparejá a un jugador veterano (mayor de 30 años) con un juvenil (menor de 20 años) de la misma línea posicional para que comparta entrenamientos por 6 meses. Si la tutoría prospera, el chico aumentará su determinación (+2), adoptará una personalidad Profesional y podrá aprender rasgos especiales de juego del mentor.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Columna Izquierda/Centro: Crear Tutoría y Tutorías Activas (col-span 2) */}
+            <div className="lg:col-span-2 space-y-6">
+              {/* Sección 1: Crear Tutoría */}
+              <div className="bg-slate-900/40 border border-slate-800/80 rounded-2xl p-6 shadow-lg backdrop-blur-md space-y-4">
+                <h3 className="text-sm font-extrabold text-white uppercase tracking-wider border-b border-slate-800 pb-2">
+                  ➕ Iniciar Nueva Tutoría
+                </h3>
+
+                {(() => {
+                  const mentoresDisponibles = jugadoresClub.filter(j => 
+                    j.edad > 30 && 
+                    !(equipoUsuario.tutorias || []).some(t => t.veteranoId === j.id || t.juvenilId === j.id)
+                  );
+
+                  const mentorSeleccionado = jugadoresClub.find(j => j.id === mentorId);
+
+                  const apprenticesDisponibles = jugadoresClub.filter(j => 
+                    j.edad < 20 && 
+                    !(equipoUsuario.tutorias || []).some(t => t.veteranoId === j.id || t.juvenilId === j.id) &&
+                    (!mentorSeleccionado || obtenerCategoriaPosicion(j.posicion) === obtenerCategoriaPosicion(mentorSeleccionado.posicion))
+                  );
+
+                  return (
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {/* Selector Mentor */}
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                            Seleccionar Mentor (Veterano &gt; 30 años)
+                          </label>
+                          <select
+                            value={mentorId}
+                            onChange={(e) => {
+                              const nextMentorId = e.target.value;
+                              setMentorId(nextMentorId);
+                              // Limpiar aprendiz si no es de la misma línea posicional que el nuevo mentor
+                              const nextMentor = jugadoresClub.find(j => j.id === nextMentorId);
+                              const currentApprentice = jugadoresClub.find(j => j.id === apprenticeId);
+                              if (nextMentor && currentApprentice) {
+                                if (obtenerCategoriaPosicion(nextMentor.posicion) !== obtenerCategoriaPosicion(currentApprentice.posicion)) {
+                                  setApprenticeId('');
+                                }
+                              }
+                            }}
+                            className="w-full bg-slate-950/80 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-300 focus:outline-none focus:border-teal-500 hover:border-slate-700 cursor-pointer transition-all"
+                          >
+                            <option value="">-- Elegir un Mentor --</option>
+                            {mentoresDisponibles.map(j => (
+                              <option key={j.id} value={j.id}>
+                                {j.nombre} ({j.posicion} - {j.edad} años) - Det: {j.atributos.determinacion} - {j.personalidad}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* Selector Aprendiz */}
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                            Seleccionar Aprendiz (Juvenil &lt; 20 años)
+                          </label>
+                          <select
+                            value={apprenticeId}
+                            onChange={(e) => setApprenticeId(e.target.value)}
+                            disabled={!mentorId}
+                            className={`w-full bg-slate-950/80 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-300 focus:outline-none focus:border-teal-500 hover:border-slate-700 cursor-pointer transition-all ${
+                              !mentorId ? 'opacity-50 cursor-not-allowed' : ''
+                            }`}
+                          >
+                            <option value="">
+                              {!mentorId 
+                                ? '⚠️ Selecciona un mentor primero' 
+                                : '-- Elegir un Juvenil --'}
+                            </option>
+                            {apprenticesDisponibles.map(j => (
+                              <option key={j.id} value={j.id}>
+                                {j.nombre} ({j.posicion} - {j.edad} años) - Det: {j.atributos.determinacion} - {j.personalidad}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* Botón de Enviar */}
+                      <button
+                        onClick={() => {
+                          if (!mentorId || !apprenticeId) return;
+                          const res = iniciarTutoria(mentorId, apprenticeId);
+                          if (res.aceptado) {
+                            setNotificacion({ tipo: 'success', mensaje: res.mensaje });
+                            setMentorId('');
+                            setApprenticeId('');
+                          } else {
+                            setNotificacion({ tipo: 'error', mensaje: res.mensaje });
+                          }
+                        }}
+                        disabled={!mentorId || !apprenticeId}
+                        className={`w-full py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all duration-200 ${
+                          mentorId && apprenticeId
+                            ? 'bg-teal-600 hover:bg-teal-500 text-white shadow-md cursor-pointer'
+                            : 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-850'
+                        }`}
+                      >
+                        🚀 Iniciar Tutoría de 180 Días
+                      </button>
+                    </div>
+                  );
+                })()}
+              </div>
+
+              {/* Sección 2: Tutorías Activas */}
+              <div className="bg-slate-900/40 border border-slate-800/80 rounded-2xl p-6 shadow-lg backdrop-blur-md space-y-4">
+                <h3 className="text-sm font-extrabold text-white uppercase tracking-wider border-b border-slate-800 pb-2">
+                  ⏳ Tutorías en Curso
+                </h3>
+
+                {(() => {
+                  const tutorias = equipoUsuario.tutorias || [];
+                  if (tutorias.length === 0) {
+                    return (
+                      <div className="text-center py-8 text-slate-550 text-xs italic">
+                        No hay procesos de tutorías en curso en este momento.
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="space-y-4">
+                      {tutorias.map(t => {
+                        const mentor = jugadoresClub.find(j => j.id === t.veteranoId);
+                        const juvenil = jugadoresClub.find(j => j.id === t.juvenilId);
+                        const diasTranscurridos = t.diasTotales - t.diasRestantes;
+                        const porcentaje = Math.min(100, Math.round((diasTranscurridos / t.diasTotales) * 100));
+
+                        return (
+                          <div 
+                            key={t.id} 
+                            className="bg-slate-950/60 border border-slate-850/60 rounded-xl p-4 space-y-3 shadow-inner hover:border-slate-800 transition-colors"
+                          >
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                              {/* Mentor & Juvenil */}
+                              <div className="flex items-center gap-3 flex-wrap">
+                                <div>
+                                  <span className="text-[10px] uppercase font-bold text-slate-500 block">Mentor</span>
+                                  <span className="font-semibold text-slate-200 text-xs">{t.veteranoNombre}</span>
+                                  {mentor && (
+                                    <span className="text-[10px] text-slate-400 ml-1">({mentor.posicion}, {mentor.edad} años)</span>
+                                  )}
+                                </div>
+                                <div className="text-slate-600 text-lg hidden sm:block">🤝</div>
+                                <div>
+                                  <span className="text-[10px] uppercase font-bold text-slate-500 block">Aprendiz</span>
+                                  <span className="font-semibold text-slate-200 text-xs">{t.juvenilNombre}</span>
+                                  {juvenil && (
+                                    <span className="text-[10px] text-slate-400 ml-1">({juvenil.posicion}, {juvenil.edad} años)</span>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Días Restantes */}
+                              <div className="text-right">
+                                <span className="text-xs font-bold text-teal-400 font-mono">{t.diasRestantes} días</span>
+                                <span className="text-[10px] text-slate-500 block">restantes de 180</span>
+                              </div>
+                            </div>
+
+                            {/* Barra de progreso */}
+                            <div className="space-y-1">
+                              <div className="flex justify-between text-[10px] font-bold text-slate-400">
+                                <span>Progreso</span>
+                                <span>{porcentaje}%</span>
+                              </div>
+                              <div className="h-2 w-full bg-slate-950 rounded-full relative overflow-hidden border border-slate-850">
+                                <div 
+                                  style={{ width: `${porcentaje}%` }}
+                                  className="h-full bg-gradient-to-r from-teal-500 to-emerald-500 rounded-full absolute top-0 left-0 transition-all duration-300"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+
+            {/* Columna Derecha: Comparativa de Jugadores Seleccionados */}
+            <div className="bg-slate-900/40 border border-slate-800/80 rounded-2xl p-6 shadow-lg backdrop-blur-md flex flex-col justify-between min-h-[350px]">
+              <div className="space-y-4">
+                <h3 className="text-sm font-extrabold text-white uppercase tracking-wider border-b border-slate-800 pb-2">
+                  📊 Vista Previa del Mentoreo
+                </h3>
+
+                {(() => {
+                  const mentor = jugadoresClub.find(j => j.id === mentorId);
+                  const juvenil = jugadoresClub.find(j => j.id === apprenticeId);
+
+                  if (!mentor || !juvenil) {
+                    return (
+                      <div className="text-center py-12 text-slate-500 text-xs italic flex flex-col items-center justify-center h-full">
+                        <span className="text-4xl mb-3">🎓</span>
+                        Selecciona un mentor y un aprendiz para visualizar la comparativa y los efectos proyectados.
+                      </div>
+                    );
+                  }
+
+                  const clash = sonPersonalidadesChocantes(mentor.personalidad, juvenil.personalidad);
+                  const detTransfer = mentor.atributos.determinacion > juvenil.atributos.determinacion;
+                  const traitsToCopy = (mentor.rasgos || []).filter(r => !(juvenil.rasgos || []).includes(r));
+
+                  return (
+                    <div className="space-y-5 text-xs">
+                      {/* Comparación de Atributos Clave */}
+                      <div className="bg-slate-950/60 border border-slate-850 rounded-xl p-3.5 space-y-3">
+                        <h4 className="text-[10px] font-black text-slate-300 uppercase tracking-wide">Atributos y Personalidades</h4>
+                        
+                        {/* Determinación */}
+                        <div className="flex justify-between items-center">
+                          <span className="text-slate-400">Determinación:</span>
+                          <div className="flex items-center gap-2 font-mono">
+                            <span className="text-slate-200">{mentor.atributos.determinacion}</span>
+                            <span className="text-slate-600">vs</span>
+                            <span className={detTransfer ? 'text-emerald-400 font-bold' : 'text-slate-200'}>
+                              {juvenil.atributos.determinacion}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Personalidad */}
+                        <div className="flex justify-between items-center">
+                          <span className="text-slate-400">Personalidad:</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-slate-200">{mentor.personalidad}</span>
+                            <span className="text-slate-600">vs</span>
+                            <span className="text-slate-200">{juvenil.personalidad}</span>
+                          </div>
+                        </div>
+
+                        {/* Rasgos Especiales Mentor */}
+                        <div className="space-y-1 border-t border-slate-850 pt-2.5">
+                          <span className="text-slate-400 block mb-1">Rasgos del Mentor:</span>
+                          {mentor.rasgos && mentor.rasgos.length > 0 ? (
+                            <div className="flex flex-wrap gap-1">
+                              {mentor.rasgos.map(r => (
+                                <span key={r} className="bg-slate-900 border border-slate-800 text-[10px] text-slate-300 px-2 py-0.5 rounded">
+                                  {r}
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="text-slate-500 italic">Sin rasgos especiales</span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Efectos Proyectados */}
+                      <div className="bg-slate-950/60 border border-slate-850 rounded-xl p-3.5 space-y-3">
+                        <h4 className="text-[10px] font-black text-slate-300 uppercase tracking-wide">Efectos Proyectados</h4>
+                        
+                        <div className="space-y-2">
+                          {/* Copia de Rasgos */}
+                          <div className="flex items-start gap-2">
+                            <span className="text-emerald-400 mt-0.5">✔️</span>
+                            <span className="text-slate-300">
+                              <strong>50% de probabilidad</strong> de que el aprendiz copie un rasgo del mentor ({traitsToCopy.length > 0 ? <strong className="text-teal-400">pueden ser: {traitsToCopy.join(', ')}</strong> : <span className="text-slate-400 italic">ninguno nuevo disponible</span>}).
+                            </span>
+                          </div>
+
+                          {/* Determinación y Personalidad */}
+                          <div className="flex items-start gap-2">
+                            {detTransfer ? (
+                              <>
+                                <span className="text-emerald-400 mt-0.5">✔️</span>
+                                <span className="text-slate-300">
+                                  El aprendiz ganará <strong className="text-emerald-400">+2 de Determinación</strong> (máx. 20) y su personalidad se volverá <strong className="text-emerald-400">Profesional</strong>.
+                                </span>
+                              </>
+                            ) : (
+                              <>
+                                <span className="text-slate-500 mt-0.5">➖</span>
+                                <span className="text-slate-400">
+                                  El aprendiz no ganará determinación porque su mentor tiene determinación igual o menor.
+                                </span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Alerta de Conflicto de Personalidad */}
+                      {clash && (
+                        <div className="bg-rose-500/10 border border-rose-500/20 text-rose-400 p-3.5 rounded-xl space-y-1">
+                          <div className="font-bold flex items-center gap-1">
+                            <span>⚠️</span>
+                            <span>Choque de Personalidades Detectado</span>
+                          </div>
+                          <p className="text-[10px] leading-relaxed">
+                            Uno de los jugadores es <strong>Problemático</strong> y el otro tiene una personalidad positiva. Existe un <strong>20% de probabilidad de fallo</strong> al finalizar, lo cual cancelará los efectos y reducirá la moral de ambos en 25 puntos.
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+              </div>
             </div>
           </div>
         </div>

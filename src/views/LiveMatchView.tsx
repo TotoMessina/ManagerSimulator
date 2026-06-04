@@ -15,6 +15,7 @@ export const LiveMatchView: React.FC = () => {
   const {
     partidoEnVivo,
     jugadores,
+    equipos,
     equipoUsuarioId,
     finalizarPartidoEnVivo
   } = useGame();
@@ -1055,9 +1056,14 @@ export const LiveMatchView: React.FC = () => {
       // Si se lesionó en este partido
       if (lesionadosEnVivo.current[jClon.id]) {
         const sem = lesionadosEnVivo.current[jClon.id];
+        const eqJugador = equipos.find(e => e.id === jClon.idEquipo);
+        const nivelMed = eqJugador?.nivelInstalacionesMedicas ?? 1;
+        const factorReduccion = 1 - (nivelMed - 1) * 0.15;
+        const semAjustadas = Math.max(1, Math.round(sem * factorReduccion));
+
         jClon.lesionado = true;
-        jClon.semanasLesion = sem;
-        jClon.semanasLesionado = sem;
+        jClon.semanasLesion = semAjustadas;
+        jClon.semanasLesionado = semAjustadas;
         jClon.titular = false; // Ya no puede ser titular
       }
 
@@ -1103,7 +1109,7 @@ export const LiveMatchView: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#0b0f19] text-slate-100 flex flex-col p-6 relative overflow-x-hidden overflow-y-auto font-sans">
+    <div className="min-h-screen bg-[#0b0f19] text-slate-100 flex flex-col p-4 md:p-6 relative overflow-x-hidden overflow-y-auto font-sans">
       
       {/* Luces y brillos de fondo */}
       <div className="absolute top-[-20%] left-[-10%] w-[600px] h-[600px] rounded-full bg-teal-500/5 blur-[150px] pointer-events-none"></div>
@@ -1152,31 +1158,31 @@ export const LiveMatchView: React.FC = () => {
         </div>
 
         {/* Tablero de Marcador */}
-        <div className="flex items-center justify-center gap-6 w-full max-w-3xl">
+        <div className="flex items-center justify-center gap-2 sm:gap-6 w-full max-w-3xl">
           {/* Local */}
           <div className="text-center w-1/3 flex flex-col items-center">
-            <span className="text-5xl block mb-2 filter drop-shadow-[0_4px_6px_rgba(0,0,0,0.3)]">{local.escudo}</span>
-            <span className="text-base font-extrabold text-slate-100 truncate w-full">{local.nombre}</span>
-            <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-1">{local.nombreCorto}</span>
+            <span className="text-3xl md:text-5xl block mb-2 filter drop-shadow-[0_4px_6px_rgba(0,0,0,0.3)]">{local.escudo}</span>
+            <span className="text-xs md:text-base font-extrabold text-slate-100 truncate w-full">{local.nombre}</span>
+            <span className="text-[9px] md:text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-1">{local.nombreCorto}</span>
           </div>
 
           {/* Marcador Central */}
-          <div className="flex flex-col items-center justify-center bg-slate-950/80 px-6 py-4 rounded-xl border border-slate-800 shadow-inner w-40 flex-shrink-0">
-            <div className="flex items-center gap-3">
-              <span className="text-4xl font-black text-teal-400 font-mono tracking-tighter">{golesLocal}</span>
-              <span className="text-lg font-bold text-slate-600">-</span>
-              <span className="text-4xl font-black text-teal-400 font-mono tracking-tighter">{golesVisitante}</span>
+          <div className="flex flex-col items-center justify-center bg-slate-950/80 px-3 py-2 md:px-6 md:py-4 rounded-xl border border-slate-800 shadow-inner w-24 md:w-40 flex-shrink-0">
+            <div className="flex items-center gap-1.5 md:gap-3">
+              <span className="text-2xl md:text-4xl font-black text-teal-400 font-mono tracking-tighter">{golesLocal}</span>
+              <span className="text-sm md:text-lg font-bold text-slate-600">-</span>
+              <span className="text-2xl md:text-4xl font-black text-teal-400 font-mono tracking-tighter">{golesVisitante}</span>
             </div>
-            <div className="mt-2 text-xs font-black bg-slate-900 px-3 py-1 rounded border border-slate-850 text-slate-300 font-mono">
+            <div className="mt-1 md:mt-2 text-[10px] md:text-xs font-black bg-slate-900 px-2 py-0.5 md:px-3 md:py-1 rounded border border-slate-850 text-slate-300 font-mono">
               {minuto === 90 ? 'FIN' : `${minuto}'`}
             </div>
           </div>
 
           {/* Visitante */}
           <div className="text-center w-1/3 flex flex-col items-center">
-            <span className="text-5xl block mb-2 filter drop-shadow-[0_4px_6px_rgba(0,0,0,0.3)]">{visitante.escudo}</span>
-            <span className="text-base font-extrabold text-slate-100 truncate w-full">{visitante.nombre}</span>
-            <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-1">{visitante.nombreCorto}</span>
+            <span className="text-3xl md:text-5xl block mb-2 filter drop-shadow-[0_4px_6px_rgba(0,0,0,0.3)]">{visitante.escudo}</span>
+            <span className="text-xs md:text-base font-extrabold text-slate-100 truncate w-full">{visitante.nombre}</span>
+            <span className="text-[9px] md:text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-1">{visitante.nombreCorto}</span>
           </div>
         </div>
 
@@ -1238,10 +1244,10 @@ export const LiveMatchView: React.FC = () => {
       </div>
 
       {/* Sección del Cuerpo: Log y Controles Laterales */}
-      <div className="flex-1 grid grid-cols-1 lg:grid-cols-4 gap-6 overflow-hidden">
+      <div className="flex-1 grid grid-cols-1 lg:grid-cols-4 gap-6 lg:overflow-hidden overflow-visible">
         
         {/* Lado Izquierdo: Comentarios en Vivo (3 columnas) */}
-        <div className="lg:col-span-3 bg-slate-900/60 backdrop-blur-md rounded-2xl border border-slate-800 p-6 flex flex-col overflow-hidden h-[450px]">
+        <div className="lg:col-span-3 bg-slate-900/60 backdrop-blur-md rounded-2xl border border-slate-800 p-4 md:p-6 flex flex-col overflow-hidden h-[360px] md:h-[450px]">
           <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest border-b border-slate-850 pb-2 flex justify-between items-center">
             <span>🎙️ Relatos y Comentarios Oficiales</span>
             <span className="font-mono font-bold text-[10px] text-teal-400 bg-teal-500/10 px-2 py-0.5 rounded border border-teal-500/20">Señal de Audio Activa</span>

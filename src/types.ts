@@ -116,10 +116,28 @@ export interface Jugador {
   asistencias: number;
   partidosJugados: number;
   calificacionMedia: number; // Calificación promedio de rendimiento (ej. 7.15)
+  rasgos?: string[];
 }
 
 export type EstiloJuego = 'Ofensivo' | 'Defensivo' | 'Equilibrado';
 export type Formacion = '4-3-3' | '4-4-2' | '3-5-2' | '5-3-2';
+
+export interface Tutoria {
+  id: string;
+  veteranoId: string;
+  veteranoNombre: string;
+  juvenilId: string;
+  juvenilNombre: string;
+  diasRestantes: number;
+  diasTotales: number;
+}
+
+export interface ProyectoConstruccion {
+  tipo: 'estadio' | 'clinica' | 'academia';
+  diasRestantes: number;
+  diasTotales: number;
+  incremento?: number;
+}
 
 export interface Equipo {
   id: string;
@@ -142,6 +160,10 @@ export interface Equipo {
   semanaCharlaRealizada?: boolean;   // Cooldown de charla motivacional semanal
   semanaActividadRealizada?: boolean; // Cooldown de actividad de cohesión semanal
   sinEntrenador?: boolean;           // Indica si el club IA no tiene entrenador actual
+  nivelInstalacionesMedicas?: number; // 1 a 5
+  nivelAcademiaJuvenil?: number; // 1 a 5
+  proyectosConstruccion?: ProyectoConstruccion[];
+  tutorias?: Tutoria[];
 }
 
 export interface TablaEquipo {

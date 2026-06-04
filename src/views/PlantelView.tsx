@@ -340,195 +340,197 @@ export const PlantelView: React.FC = () => {
             ========================================== */}
         <div className="xl:col-span-1">
           {jugadorSeleccionado ? (
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl relative">
-
-              {/* Botón para cerrar perfil móvil */}
-              <button
-                onClick={() => setJugadorSeleccionado(null)}
-                className="absolute top-4 right-4 text-slate-500 hover:text-white transition-colors p-1"
-                aria-label="Cerrar detalles"
-              >
-                ✕
-              </button>
-
-              {/* Cabecera / Identidad */}
-              <div className="p-5 bg-slate-950 border-b border-slate-800">
-                <div>
-                  <span className={`text-[9px] font-extrabold px-2 py-0.5 rounded tracking-wider leading-none ${jugadorSeleccionado.posicion === 'POR' ? 'bg-yellow-500/10 text-yellow-400' :
-                      jugadorSeleccionado.posicion === 'DFC' || jugadorSeleccionado.posicion === 'LI' || jugadorSeleccionado.posicion === 'LD' ? 'bg-blue-500/10 text-blue-400' :
-                        jugadorSeleccionado.posicion === 'MC' || jugadorSeleccionado.posicion === 'MCO' ? 'bg-emerald-500/10 text-emerald-400' :
-                          'bg-rose-500/10 text-rose-400'
-                    }`}>
-                    {jugadorSeleccionado.posicion}
-                  </span>
-
-                  <h3 className="text-xl font-extrabold text-white mt-2 tracking-tight leading-tight">
-                    {jugadorSeleccionado.nombre}
-                  </h3>
-                  <p className="text-[10px] text-slate-500 font-medium">
-                    {jugadorSeleccionado.nacionalidad} · {jugadorSeleccionado.edad} años
-                  </p>
-                </div>
-
-                {/* Calidades CA / PA */}
-                <div className="grid grid-cols-2 gap-4 mt-5">
-                  <div className="bg-slate-900 border border-slate-800/80 rounded-xl p-2.5 text-center">
-                    <span className="text-[9px] uppercase font-bold text-slate-500 tracking-wider block">Calidad Actual</span>
-                    <span className="text-2xl font-black text-teal-400 font-mono block mt-0.5">{jugadorSeleccionado.ca}/100</span>
-                  </div>
-                  <div className="bg-slate-900 border border-slate-800/80 rounded-xl p-2.5 text-center">
-                    <span className="text-[9px] uppercase font-bold text-slate-500 tracking-wider block">Potencial (PA)</span>
-                    <span className="text-2xl font-black text-slate-300 font-mono block mt-0.5">{jugadorSeleccionado.pa}/100</span>
-                  </div>
-                </div>
-
-                {/* Personalidad del Vestuario */}
-                <div className="mt-4 p-3 bg-slate-900/60 border border-slate-800/80 rounded-xl flex items-center justify-between text-xs">
-                  <div>
-                    <span className="text-[9px] uppercase font-bold text-slate-500 tracking-wider block">Personalidad del Vestuario</span>
-                    <span className={`text-xs font-black block mt-0.5 ${jugadorSeleccionado.personalidad === 'Líder' ? 'text-cyan-400' :
-                        jugadorSeleccionado.personalidad === 'Ambicioso' ? 'text-amber-400' :
-                          jugadorSeleccionado.personalidad === 'Profesional' ? 'text-emerald-400' :
-                            jugadorSeleccionado.personalidad === 'Problemático' ? 'text-rose-400' :
-                              'text-fuchsia-400'
-                      }`}>
-                      {jugadorSeleccionado.personalidad === 'Líder' ? '⭐ Líder' :
-                        jugadorSeleccionado.personalidad === 'Ambicioso' ? '⚡ Ambicioso' :
-                          jugadorSeleccionado.personalidad === 'Profesional' ? '💼 Profesional' :
-                            jugadorSeleccionado.personalidad === 'Problemático' ? '⚠️ Problemático' :
-                              '🛡️ Leal'}
-                    </span>
-                  </div>
-                  {(jugadorSeleccionado.partidosSeguidosBanco || 0) > 0 && (
-                    <div className="text-right">
-                      <span className="text-[9px] uppercase font-bold text-slate-500 tracking-wider block">Banco Consecutivo</span>
-                      <span className="text-xs font-mono font-bold text-amber-400 block mt-0.5">{jugadorSeleccionado.partidosSeguidosBanco} partidos</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Atributos Agrupados (Físicos, Técnicos, Mentales) */}
-              <div className="p-5 space-y-6 max-h-[500px] overflow-y-auto custom-scrollbar">
-
-                {/* CATEGORÍA 1: FÍSICOS */}
-                <div className="space-y-3">
-                  <h4 className="text-[9px] font-extrabold text-slate-500 uppercase tracking-widest border-b border-slate-850 pb-1 flex items-center gap-1.5">
-                    <span>🏃‍♂️</span> Atributos Físicos
-                  </h4>
-                  <div className="space-y-2.5">
-                    {renderFilaAtributo('Velocidad', jugadorSeleccionado.atributos.velocidad)}
-                    {renderFilaAtributo('Aceleración', jugadorSeleccionado.atributos.aceleracion)}
-                    {renderFilaAtributo('Resistencia', jugadorSeleccionado.atributos.resistencia)}
-                    {renderFilaAtributo('Fuerza', jugadorSeleccionado.atributos.fuerza)}
-                  </div>
-                </div>
-
-                {/* CATEGORÍA 2: TÉCNICOS */}
-                <div className="space-y-3">
-                  <h4 className="text-[9px] font-extrabold text-slate-500 uppercase tracking-widest border-b border-slate-850 pb-1 flex items-center gap-1.5">
-                    <span>🎯</span> Atributos Técnicos
-                  </h4>
-                  <div className="space-y-2.5">
-                    {renderFilaAtributo('Remate / Definición', jugadorSeleccionado.atributos.remate)}
-                    {renderFilaAtributo('Pase', jugadorSeleccionado.atributos.pase)}
-                    {renderFilaAtributo('Regate / Dribbling', jugadorSeleccionado.atributos.regate)}
-                    {renderFilaAtributo('Defensa / Marcaje', jugadorSeleccionado.atributos.defensa)}
-                    {renderFilaAtributo('Técnica / Control', jugadorSeleccionado.atributos.tecnica)}
-                    {jugadorSeleccionado.posicion === 'POR' &&
-                      renderFilaAtributo('Reflejos (Arquero)', jugadorSeleccionado.atributos.reflejos)
-                    }
-                  </div>
-                </div>
-
-                {/* CATEGORÍA 3: MENTALES */}
-                <div className="space-y-3">
-                  <h4 className="text-[9px] font-extrabold text-slate-500 uppercase tracking-widest border-b border-slate-850 pb-1 flex items-center gap-1.5">
-                    <span>🧠</span> Atributos Mentales
-                  </h4>
-                  <div className="space-y-2.5">
-                    {renderFilaAtributo('Visión de Juego', jugadorSeleccionado.atributos.vision)}
-                    {renderFilaAtributo('Toma de Decisiones', jugadorSeleccionado.atributos.decisiones)}
-                    {renderFilaAtributo('Determinación', jugadorSeleccionado.atributos.determinacion)}
-                    {renderFilaAtributo('Colocación / Posicionamiento', jugadorSeleccionado.atributos.posicionamiento)}
-                  </div>
-                </div>
-
-              </div>
-
-              {/* Pie de Ficha Finanzas */}
-              <div className="p-4 bg-slate-950 border-t border-slate-800 flex justify-between items-center text-xs">
-                <div>
-                  <div className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Valor de Mercado</div>
-                  <div className="text-teal-400 font-extrabold font-mono mt-0.5">
-                    {formatearMoneda(jugadorSeleccionado.valorMercado)}
-                  </div>
-                </div>
-                <div className="text-center">
-                  <div className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Salario</div>
-                  <div className="text-slate-300 font-bold font-mono mt-0.5">
-                    {formatearMoneda(jugadorSeleccionado.salarioSemanal)}
-                  </div>
-                </div>
-                <div className="text-center">
-                  <div className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Cláusula</div>
-                  <div className="text-amber-500 font-bold font-mono mt-0.5">
-                    {jugadorSeleccionado.clausulaRescision ? formatearMoneda(jugadorSeleccionado.clausulaRescision) : 'Sin cláusula'}
-                  </div>
-                </div>
-                <div className="text-center">
-                  <div className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Contrato</div>
-                  <div className={`font-bold font-mono mt-0.5 ${jugadorSeleccionado.mesesContrato !== undefined && jugadorSeleccionado.mesesContrato <= 6 ? 'text-rose-400 animate-pulse' : 'text-slate-300'
-                    }`}>
-                    {jugadorSeleccionado.mesesContrato !== undefined ? `${jugadorSeleccionado.mesesContrato} meses` : '---'}
-                  </div>
-                </div>
-                <div className="text-right">
-                  <div className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Salud</div>
-                  <div className={`font-bold mt-0.5 ${jugadorSeleccionado.lesionado ? 'text-rose-400 animate-pulse' : 'text-emerald-400'}`}>
-                    {jugadorSeleccionado.lesionado ? '⚠️ Lesionado' : '🟢 OK'}
-                  </div>
-                </div>
-              </div>
-
-              {/* Promesas de Gestión */}
-              {jugadorSeleccionado.promesas && jugadorSeleccionado.promesas.length > 0 && (
-                <div className="p-4 bg-slate-950 border-t border-slate-800 space-y-2">
-                  <h4 className="text-[9px] font-extrabold text-slate-500 uppercase tracking-widest pb-1 flex items-center gap-1.5 border-b border-slate-800/60 pb-1.5">
-                    <span>🤝</span> Promesas de Gestión
-                  </h4>
-                  <div className="space-y-2">
-                    {jugadorSeleccionado.promesas.map((promesa, idx) => (
-                      <div key={idx} className="flex justify-between items-center bg-slate-900/40 p-2.5 rounded-xl border border-slate-850 text-[11px] gap-4">
-                        <span className="text-slate-300 font-semibold">{promesa.descripcion}</span>
-                        <span className={`text-[9px] font-bold px-2.5 py-0.5 rounded-full select-none ${promesa.estado === 'Cumplida' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
-                            promesa.estado === 'Incumplida' ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20 animate-pulse' :
-                              'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                          }`}>
-                          {promesa.estado}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Botón de Acción Prominente */}
-              <div className="p-4 bg-slate-900 border-t border-slate-800/80">
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm xl:relative xl:inset-auto xl:z-auto xl:bg-transparent xl:backdrop-blur-none xl:p-0">
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl relative w-full max-w-lg xl:max-w-none flex flex-col max-h-[90vh] xl:max-h-none animate-scale-in">
+                
+                {/* Botón para cerrar perfil móvil/desktop */}
                 <button
-                  onClick={() => {
-                    setJugadorARenovar(jugadorSeleccionado);
-                    setClausulaRenovacion(Math.round((jugadorSeleccionado.valorMercado * 1.5) / 1000) * 1000);
-                  }}
-                  className="w-full py-2.5 bg-gradient-to-r from-teal-500 to-emerald-600 hover:from-teal-400 hover:to-emerald-500 text-white font-bold rounded-lg text-xs uppercase tracking-wider shadow-md hover:shadow-lg transition-all text-center"
+                  onClick={() => setJugadorSeleccionado(null)}
+                  className="absolute top-4 right-4 text-slate-500 hover:text-white transition-colors p-1 z-20"
+                  aria-label="Cerrar detalles"
                 >
-                  ✍️ Renovar Contrato
+                  ✕
                 </button>
-              </div>
 
+                {/* Cabecera / Identidad */}
+                <div className="p-5 bg-slate-950 border-b border-slate-800">
+                  <div>
+                    <span className={`text-[9px] font-extrabold px-2 py-0.5 rounded tracking-wider leading-none ${jugadorSeleccionado.posicion === 'POR' ? 'bg-yellow-500/10 text-yellow-400' :
+                        jugadorSeleccionado.posicion === 'DFC' || jugadorSeleccionado.posicion === 'LI' || jugadorSeleccionado.posicion === 'LD' ? 'bg-blue-500/10 text-blue-400' :
+                          jugadorSeleccionado.posicion === 'MC' || jugadorSeleccionado.posicion === 'MCO' ? 'bg-emerald-500/10 text-emerald-400' :
+                            'bg-rose-500/10 text-rose-400'
+                      }`}>
+                      {jugadorSeleccionado.posicion}
+                    </span>
+
+                    <h3 className="text-xl font-extrabold text-white mt-2 tracking-tight leading-tight">
+                      {jugadorSeleccionado.nombre}
+                    </h3>
+                    <p className="text-[10px] text-slate-500 font-medium">
+                      {jugadorSeleccionado.nacionalidad} · {jugadorSeleccionado.edad} años
+                    </p>
+                  </div>
+
+                  {/* Calidades CA / PA */}
+                  <div className="grid grid-cols-2 gap-4 mt-5">
+                    <div className="bg-slate-900 border border-slate-800/80 rounded-xl p-2.5 text-center">
+                      <span className="text-[9px] uppercase font-bold text-slate-500 tracking-wider block">Calidad Actual</span>
+                      <span className="text-2xl font-black text-teal-400 font-mono block mt-0.5">{jugadorSeleccionado.ca}/100</span>
+                    </div>
+                    <div className="bg-slate-900 border border-slate-800/80 rounded-xl p-2.5 text-center">
+                      <span className="text-[9px] uppercase font-bold text-slate-500 tracking-wider block">Potencial (PA)</span>
+                      <span className="text-2xl font-black text-slate-300 font-mono block mt-0.5">{jugadorSeleccionado.pa}/100</span>
+                    </div>
+                  </div>
+
+                  {/* Personalidad del Vestuario */}
+                  <div className="mt-4 p-3 bg-slate-900/60 border border-slate-800/80 rounded-xl flex items-center justify-between text-xs">
+                    <div>
+                      <span className="text-[9px] uppercase font-bold text-slate-500 tracking-wider block">Personalidad del Vestuario</span>
+                      <span className={`text-xs font-black block mt-0.5 ${jugadorSeleccionado.personalidad === 'Líder' ? 'text-cyan-400' :
+                          jugadorSeleccionado.personalidad === 'Ambicioso' ? 'text-amber-400' :
+                            jugadorSeleccionado.personalidad === 'Profesional' ? 'text-emerald-400' :
+                              jugadorSeleccionado.personalidad === 'Problemático' ? 'text-rose-400' :
+                                'text-fuchsia-400'
+                        }`}>
+                        {jugadorSeleccionado.personalidad === 'Líder' ? '⭐ Líder' :
+                          jugadorSeleccionado.personalidad === 'Ambicioso' ? '⚡ Ambicioso' :
+                            jugadorSeleccionado.personalidad === 'Profesional' ? '💼 Profesional' :
+                              jugadorSeleccionado.personalidad === 'Problemático' ? '⚠️ Problemático' :
+                                '🛡️ Leal'}
+                      </span>
+                    </div>
+                    {(jugadorSeleccionado.partidosSeguidosBanco || 0) > 0 && (
+                      <div className="text-right">
+                        <span className="text-[9px] uppercase font-bold text-slate-500 tracking-wider block">Banco Consecutivo</span>
+                        <span className="text-xs font-mono font-bold text-amber-400 block mt-0.5">{jugadorSeleccionado.partidosSeguidosBanco} partidos</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Atributos Agrupados (Físicos, Técnicos, Mentales) */}
+                <div className="p-5 space-y-6 overflow-y-auto custom-scrollbar flex-1">
+
+                  {/* CATEGORÍA 1: FÍSICOS */}
+                  <div className="space-y-3">
+                    <h4 className="text-[9px] font-extrabold text-slate-500 uppercase tracking-widest border-b border-slate-850 pb-1 flex items-center gap-1.5">
+                      <span>🏃‍♂️</span> Atributos Físicos
+                    </h4>
+                    <div className="space-y-2.5">
+                      {renderFilaAtributo('Velocidad', jugadorSeleccionado.atributos.velocidad)}
+                      {renderFilaAtributo('Aceleración', jugadorSeleccionado.atributos.aceleracion)}
+                      {renderFilaAtributo('Resistencia', jugadorSeleccionado.atributos.resistencia)}
+                      {renderFilaAtributo('Fuerza', jugadorSeleccionado.atributos.fuerza)}
+                    </div>
+                  </div>
+
+                  {/* CATEGORÍA 2: TÉCNICOS */}
+                  <div className="space-y-3">
+                    <h4 className="text-[9px] font-extrabold text-slate-500 uppercase tracking-widest border-b border-slate-850 pb-1 flex items-center gap-1.5">
+                      <span>🎯</span> Atributos Técnicos
+                    </h4>
+                    <div className="space-y-2.5">
+                      {renderFilaAtributo('Remate / Definición', jugadorSeleccionado.atributos.remate)}
+                      {renderFilaAtributo('Pase', jugadorSeleccionado.atributos.pase)}
+                      {renderFilaAtributo('Regate / Dribbling', jugadorSeleccionado.atributos.regate)}
+                      {renderFilaAtributo('Defensa / Marcaje', jugadorSeleccionado.atributos.defensa)}
+                      {renderFilaAtributo('Técnica / Control', jugadorSeleccionado.atributos.tecnica)}
+                      {jugadorSeleccionado.posicion === 'POR' &&
+                        renderFilaAtributo('Reflejos (Arquero)', jugadorSeleccionado.atributos.reflejos)
+                      }
+                    </div>
+                  </div>
+
+                  {/* CATEGORÍA 3: MENTALES */}
+                  <div className="space-y-3">
+                    <h4 className="text-[9px] font-extrabold text-slate-500 uppercase tracking-widest border-b border-slate-850 pb-1 flex items-center gap-1.5">
+                      <span>🧠</span> Atributos Mentales
+                    </h4>
+                    <div className="space-y-2.5">
+                      {renderFilaAtributo('Visión de Juego', jugadorSeleccionado.atributos.vision)}
+                      {renderFilaAtributo('Toma de Decisiones', jugadorSeleccionado.atributos.decisiones)}
+                      {renderFilaAtributo('Determinación', jugadorSeleccionado.atributos.determinacion)}
+                      {renderFilaAtributo('Colocación / Posicionamiento', jugadorSeleccionado.atributos.posicionamiento)}
+                    </div>
+                  </div>
+
+                </div>
+
+                {/* Pie de Ficha Finanzas */}
+                <div className="p-4 bg-slate-950 border-t border-slate-800 flex justify-between items-center text-xs flex-wrap gap-2">
+                  <div>
+                    <div className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Valor de Mercado</div>
+                    <div className="text-teal-400 font-extrabold font-mono mt-0.5">
+                      {formatearMoneda(jugadorSeleccionado.valorMercado)}
+                    </div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Salario</div>
+                    <div className="text-slate-300 font-bold font-mono mt-0.5">
+                      {formatearMoneda(jugadorSeleccionado.salarioSemanal)}
+                    </div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Cláusula</div>
+                    <div className="text-amber-500 font-bold font-mono mt-0.5">
+                      {jugadorSeleccionado.clausulaRescision ? formatearMoneda(jugadorSeleccionado.clausulaRescision) : 'Sin cláusula'}
+                    </div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Contrato</div>
+                    <div className={`font-bold font-mono mt-0.5 ${jugadorSeleccionado.mesesContrato !== undefined && jugadorSeleccionado.mesesContrato <= 6 ? 'text-rose-400 animate-pulse' : 'text-slate-300'
+                      }`}>
+                      {jugadorSeleccionado.mesesContrato !== undefined ? `${jugadorSeleccionado.mesesContrato} meses` : '---'}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Salud</div>
+                    <div className={`font-bold mt-0.5 ${jugadorSeleccionado.lesionado ? 'text-rose-400 animate-pulse' : 'text-emerald-400'}`}>
+                      {jugadorSeleccionado.lesionado ? '⚠️ Lesionado' : '🟢 OK'}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Promesas de Gestión */}
+                {jugadorSeleccionado.promesas && jugadorSeleccionado.promesas.length > 0 && (
+                  <div className="p-4 bg-slate-950 border-t border-slate-800 space-y-2 max-h-[160px] overflow-y-auto custom-scrollbar">
+                    <h4 className="text-[9px] font-extrabold text-slate-500 uppercase tracking-widest pb-1 flex items-center gap-1.5 border-b border-slate-800/60 pb-1.5">
+                      <span>🤝</span> Promesas de Gestión
+                    </h4>
+                    <div className="space-y-2">
+                      {jugadorSeleccionado.promesas.map((promesa, idx) => (
+                        <div key={idx} className="flex justify-between items-center bg-slate-900/40 p-2.5 rounded-xl border border-slate-850 text-[11px] gap-4">
+                          <span className="text-slate-300 font-semibold">{promesa.descripcion}</span>
+                          <span className={`text-[9px] font-bold px-2.5 py-0.5 rounded-full select-none ${promesa.estado === 'Cumplida' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
+                              promesa.estado === 'Incumplida' ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20 animate-pulse' :
+                                'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                            }`}>
+                            {promesa.estado}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Botón de Acción Prominente */}
+                <div className="p-4 bg-slate-900 border-t border-slate-800/80">
+                  <button
+                    onClick={() => {
+                      setJugadorARenovar(jugadorSeleccionado);
+                      setClausulaRenovacion(Math.round((jugadorSeleccionado.valorMercado * 1.5) / 1000) * 1000);
+                    }}
+                    className="w-full py-2.5 bg-gradient-to-r from-teal-500 to-emerald-600 hover:from-teal-400 hover:to-emerald-500 text-white font-bold rounded-lg text-xs uppercase tracking-wider shadow-md hover:shadow-lg transition-all text-center"
+                  >
+                    ✍️ Renovar Contrato
+                  </button>
+                </div>
+
+              </div>
             </div>
           ) : (
-            <div className="bg-slate-900/20 border border-dashed border-slate-800 rounded-2xl p-10 text-center text-slate-500 text-xs">
+            <div className="bg-slate-900/20 border border-dashed border-slate-800 rounded-2xl p-10 text-center text-slate-500 text-xs hidden xl:block">
               <span className="text-2xl block mb-2">🔎</span>
               Hacé click en cualquier futbolista del listado de la plantilla para examinar sus cualidades detalladas de forma física y atributos (1-20).
             </div>

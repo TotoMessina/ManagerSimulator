@@ -522,6 +522,50 @@ export const DashboardView: React.FC = () => {
             </div>
           )}
 
+          {/* Proyectos de Construcción / Obras en Curso */}
+          {equipoUsuario.proyectosConstruccion && equipoUsuario.proyectosConstruccion.length > 0 && (
+            <div className="bg-slate-900/40 border border-slate-800/85 rounded-2xl p-6 space-y-4 shadow-lg backdrop-blur-md">
+              <div className="flex justify-between items-center border-b border-slate-850 pb-2">
+                <h3 className="text-xs font-bold text-white flex items-center gap-2 uppercase tracking-wider">
+                  🏗️ Obras en Curso ({equipoUsuario.proyectosConstruccion.length})
+                </h3>
+              </div>
+              <div className="space-y-4">
+                {equipoUsuario.proyectosConstruccion.map((proyecto, idx) => {
+                  const completadoPercent = Math.max(0, Math.min(100, Math.round(((proyecto.diasTotales - proyecto.diasRestantes) / proyecto.diasTotales) * 100)));
+                  const nombre = proyecto.tipo === 'estadio' 
+                    ? 'Ampliación de Estadio (+5.000 cap.)' 
+                    : proyecto.tipo === 'clinica' 
+                      ? 'Mejora de Clínica Médica' 
+                      : 'Inversión en Academia Juvenil';
+                  const icono = proyecto.tipo === 'estadio' ? '🏟️' : proyecto.tipo === 'clinica' ? '🏥' : '🎓';
+                  
+                  return (
+                    <div key={idx} className="bg-slate-950/40 p-4 rounded-xl border border-slate-800/60 space-y-2">
+                      <div className="flex justify-between items-center text-xs">
+                        <span className="font-bold text-slate-200 flex items-center gap-1.5">
+                          <span className="text-base">{icono}</span>
+                          <span>{nombre}</span>
+                        </span>
+                        <span className="text-slate-400 font-mono">
+                          {proyecto.diasRestantes} días restantes ({completadoPercent}%)
+                        </span>
+                      </div>
+                      
+                      {/* Barra de progreso */}
+                      <div className="w-full bg-slate-900 rounded-full h-2 overflow-hidden border border-slate-800">
+                        <div 
+                          className="bg-gradient-to-r from-teal-500 to-emerald-500 h-full rounded-full transition-all duration-500" 
+                          style={{ width: `${completadoPercent}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {/* Portal de Prensa y Noticias de los Entrenamientos */}
           <div className="bg-slate-900/40 border border-slate-800/80 rounded-2xl p-6 space-y-4 shadow-lg backdrop-blur-md">
             <div className="flex justify-between items-center border-b border-slate-850 pb-2">

@@ -597,7 +597,7 @@ export const SorteoCopasView: React.FC = () => {
           {fase === 'cuartos' && (
             <>
               {/* GANADORES (BOMBO 1) */}
-              <div className="col-span-2 border border-[#cf9f5d]/30 bg-[#0f0e0b]/40 rounded-2xl p-4 flex flex-col gap-3 backdrop-blur shadow-lg">
+              <div className="col-span-1 lg:col-span-2 border border-[#cf9f5d]/30 bg-[#0f0e0b]/40 rounded-2xl p-4 flex flex-col gap-3 backdrop-blur shadow-lg">
                 <div className="flex items-center justify-between border-b border-[#3b311e] pb-2">
                   <h3 className="text-sm font-bold uppercase tracking-wider text-[#cf9f5d]">Bolillero: Ganadores de Grupo</h3>
                   <span className="text-xs bg-[#cf9f5d]/20 px-3 py-0.5 rounded text-[#cf9f5d] font-bold uppercase tracking-wider">Punteros</span>
@@ -617,7 +617,7 @@ export const SorteoCopasView: React.FC = () => {
               </div>
 
               {/* SEGUNDOS (BOMBO 2) */}
-              <div className="col-span-2 border border-[#cf9f5d]/20 bg-[#0f0e0b]/40 rounded-2xl p-4 flex flex-col gap-3 backdrop-blur shadow-lg">
+              <div className="col-span-1 lg:col-span-2 border border-[#cf9f5d]/20 bg-[#0f0e0b]/40 rounded-2xl p-4 flex flex-col gap-3 backdrop-blur shadow-lg">
                 <div className="flex items-center justify-between border-b border-[#3b311e] pb-2">
                   <h3 className="text-sm font-bold uppercase tracking-wider text-[#ebd2ad]/80">Bolillero: Segundos de Grupo</h3>
                   <span className="text-xs bg-[#ebd2ad]/10 px-3 py-0.5 rounded text-[#ebd2ad] font-bold uppercase tracking-wider">Escoltas</span>

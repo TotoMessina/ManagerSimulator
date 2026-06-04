@@ -251,6 +251,39 @@ export const TacticaView: React.FC = () => {
   const dragJugadorId = useRef<string | null>(null);
   const [dragOverNodo, setDragOverNodo] = useState<string | null>(null);
   const [dragOverBench, setDragOverBench] = useState(false);
+  const [jugadorSeleccionadoId, setJugadorSeleccionadoId] = useState<string | null>(null);
+
+  const handleClickNodo = useCallback((linea: LineaTactica, index: number) => {
+    const key = `${linea}-${index}`;
+    const ocupanteId = nodosState[key] ?? null;
+
+    if (jugadorSeleccionadoId) {
+      if (jugadorSeleccionadoId === ocupanteId) {
+        setJugadorSeleccionadoId(null);
+        return;
+      }
+
+      setNodosState(prev => {
+        const nuevo = { ...prev };
+        const ocupanteActual = prev[key] ?? null;
+        const nodoOrigenKey = Object.keys(prev).find(k => prev[k] === jugadorSeleccionadoId) ?? null;
+
+        if (nodoOrigenKey) {
+          nuevo[nodoOrigenKey] = ocupanteActual;
+        }
+        nuevo[key] = jugadorSeleccionadoId;
+
+        setTimeout(() => {
+          actualizarPosicionesTacticas(nuevo);
+        }, 0);
+
+        return nuevo;
+      });
+      setJugadorSeleccionadoId(null);
+    } else if (ocupanteId) {
+      setJugadorSeleccionadoId(ocupanteId);
+    }
+  }, [jugadorSeleccionadoId, nodosState, actualizarPosicionesTacticas]);
 
   // Construir lista de nodos activos para la formación, inyectando el jugadorId del estado local
   const nodos: NodoPosicion[] = useMemo(() => {
@@ -393,21 +426,29 @@ export const TacticaView: React.FC = () => {
 
   const JugadorCard: React.FC<{ jugador: Jugador; compacto?: boolean }> = ({ jugador, compacto }) => {
     const cat = categorizarPosicion(jugador.posicion);
+    const esSeleccionado = jugadorSeleccionadoId === jugador.id;
     return (
       <div
         draggable={!jugador.lesionado}
         onDragStart={e => !jugador.lesionado && handleDragStart(jugador.id, e)}
+        onClick={(e) => {
+          e.stopPropagation();
+          if (jugador.lesionado) return;
+          setJugadorSeleccionadoId(prev => prev === jugador.id ? null : jugador.id);
+        }}
         className={`
-          group relative flex items-center gap-2.5 rounded-xl border transition-all duration-200 select-none
+          group relative flex items-center gap-2.5 rounded-xl border transition-all duration-200 select-none cursor-pointer
           ${compacto ? 'p-2' : 'p-2.5'}
           ${jugador.lesionado
-            ? 'bg-rose-950/20 border-rose-900/30 opacity-60 cursor-not-allowed'
-            : asignadosIds.has(jugador.id)
-              ? 'bg-teal-950/30 border-teal-500/30 cursor-grab shadow-teal-500/10 shadow-lg'
-              : 'bg-slate-900/60 border-slate-800 cursor-grab hover:border-slate-600 hover:bg-slate-800/60 active:scale-95'
+            ? 'bg-rose-955/20 border-rose-900/30 opacity-60 cursor-not-allowed'
+            : esSeleccionado
+              ? 'bg-teal-950/60 border-teal-400 shadow-teal-500/20 shadow-xl scale-[1.02] ring-2 ring-teal-500/50'
+              : asignadosIds.has(jugador.id)
+                ? 'bg-teal-950/30 border-teal-500/30 cursor-grab shadow-teal-500/10 shadow-lg'
+                : 'bg-slate-900/60 border-slate-800 cursor-grab hover:border-slate-600 hover:bg-slate-800/60 active:scale-95'
           }
         `}
-        title={jugador.lesionado ? 'Jugador lesionado - no disponible' : `Arrastrá a un nodo de la cancha`}
+        title={jugador.lesionado ? 'Jugador lesionado - no disponible' : `Click para seleccionar y posicionar, o Arrastrá a un nodo`}
       >
         {/* CA Badge */}
         <div className={`relative flex-shrink-0 w-9 h-9 rounded-full bg-gradient-to-br ${caColor(jugador.ca)} flex items-center justify-center shadow-md`}>
@@ -462,8 +503,9 @@ export const TacticaView: React.FC = () => {
         onDragOver={e => handleDragOverNodo(key, e)}
         onDragLeave={() => setDragOverNodo(null)}
         onDrop={e => handleDropOnNodo(nodo.linea, nodo.index, e)}
+        onClick={() => handleClickNodo(nodo.linea, nodo.index)}
         className={`
-          relative flex flex-col items-center gap-1 transition-all duration-150
+          relative flex flex-col items-center gap-1 transition-all duration-150 cursor-pointer select-none
         `}
       >
         {jugador ? (
@@ -476,77 +518,81 @@ export const TacticaView: React.FC = () => {
             onTouchEnd={handleTouchEnd}
             className={`
               relative group flex flex-col items-center cursor-grab active:cursor-grabbing
-              ${isOver ? 'scale-110' : 'hover:scale-105'}
+              ${isOver || jugadorSeleccionadoId === jugador.id ? 'scale-110' : 'hover:scale-105'}
               transition-transform duration-150
             `}
           >
             {/* Glow ring */}
-            <div className={`absolute -inset-1.5 rounded-full bg-gradient-to-br ${caColor(jugador.ca)} blur-[5px] opacity-50 group-hover:opacity-80 transition-opacity`} />
+            <div className={`absolute -inset-1.5 rounded-full bg-gradient-to-br ${jugadorSeleccionadoId === jugador.id ? 'from-teal-400 to-emerald-400 scale-110 animate-pulse' : caColor(jugador.ca)} blur-[5px] opacity-50 group-hover:opacity-80 transition-opacity`} />
             {/* Círculo */}
-            <div className={`relative w-12 h-12 rounded-full border-2 ${caBorder(jugador.ca)} bg-slate-950 flex items-center justify-center shadow-xl z-10`}>
-              <span className={`font-black text-xs bg-gradient-to-br ${caColor(jugador.ca)} bg-clip-text text-transparent`}>
+            <div className={`relative w-10 h-10 md:w-12 md:h-12 rounded-full border-2 ${jugadorSeleccionadoId === jugador.id ? 'border-teal-400 ring-2 ring-teal-500/50' : caBorder(jugador.ca)} bg-slate-950 flex items-center justify-center shadow-xl z-10`}>
+              <span className={`font-black text-[10px] md:text-xs bg-gradient-to-br ${caColor(jugador.ca)} bg-clip-text text-transparent`}>
                 {jugador.ca}
               </span>
             </div>
             {/* Posición badge */}
-            <span className={`absolute -top-1 -right-1 z-20 text-[7px] font-extrabold px-1 py-0.5 rounded leading-none uppercase border tracking-wide ${lineaBadge[categorizarPosicion(jugador.posicion)]}`}>
+            <span className={`absolute -top-1 -right-1 z-20 text-[6px] md:text-[7px] font-extrabold px-1 py-0.5 rounded leading-none uppercase border tracking-wide ${lineaBadge[categorizarPosicion(jugador.posicion)]}`}>
               {jugador.posicion}
             </span>
             {/* Nombre */}
-            <span className="mt-1.5 text-[9px] font-bold text-white bg-slate-950/90 backdrop-blur-sm px-2 py-0.5 rounded border border-slate-800 max-w-[72px] truncate text-center leading-none shadow z-10">
+            <span className="mt-1.5 text-[8px] md:text-[9px] font-bold text-white bg-slate-950/90 backdrop-blur-sm px-1.5 md:px-2 py-0.5 rounded border border-slate-800 max-w-[62px] md:max-w-[72px] truncate text-center leading-none shadow z-10">
               {jugador.nombre.split(' ').slice(-1)[0]}
             </span>
             {/* Rol táctico si tiene asignado */}
             {jugador.rolTactico && (
-              <span className="mt-1 text-[7px] font-black text-teal-400 bg-slate-950/95 px-1 py-0.5 rounded border border-teal-500/20 max-w-[72px] truncate text-center leading-none shadow z-10 uppercase tracking-widest">
+              <span className="mt-1 text-[6px] md:text-[7px] font-black text-teal-400 bg-slate-950/95 px-1 py-0.5 rounded border border-teal-500/20 max-w-[62px] md:max-w-[72px] truncate text-center leading-none shadow z-10 uppercase tracking-widest">
                 {jugador.rolTactico}
               </span>
             )}
             {/* Pateador de penales */}
             {jugador.esPateadorPenales && (
-              <span className="mt-0.5 text-[7px] font-black text-amber-400 bg-slate-950/95 px-1 py-0.5 rounded border border-amber-500/20 max-w-[72px] truncate text-center leading-none shadow z-10 uppercase tracking-widest">
+              <span className="mt-0.5 text-[6px] md:text-[7px] font-black text-amber-400 bg-slate-950/95 px-1 py-0.5 rounded border border-amber-500/20 max-w-[62px] md:max-w-[72px] truncate text-center leading-none shadow z-10 uppercase tracking-widest">
                 🎯 Penales
               </span>
             )}
             {/* Pateador de tiros libres */}
             {jugador.esPateadorTirosLibres && (
-              <span className="mt-0.5 text-[7px] font-black text-blue-400 bg-slate-950/95 px-1 py-0.5 rounded border border-blue-500/20 max-w-[72px] truncate text-center leading-none shadow z-10 uppercase tracking-widest">
+              <span className="mt-0.5 text-[6px] md:text-[7px] font-black text-blue-400 bg-slate-950/95 px-1 py-0.5 rounded border border-blue-500/20 max-w-[62px] md:max-w-[72px] truncate text-center leading-none shadow z-10 uppercase tracking-widest">
                 ☄️ Libres
               </span>
             )}
             {/* Pateador de corners */}
             {jugador.esPateadorCorners && (
-              <span className="mt-0.5 text-[7px] font-black text-emerald-400 bg-slate-950/95 px-1 py-0.5 rounded border border-emerald-500/20 max-w-[72px] truncate text-center leading-none shadow z-10 uppercase tracking-widest">
+              <span className="mt-0.5 text-[6px] md:text-[7px] font-black text-emerald-400 bg-slate-950/95 px-1 py-0.5 rounded border border-emerald-500/20 max-w-[62px] md:max-w-[72px] truncate text-center leading-none shadow z-10 uppercase tracking-widest">
                 📐 Córner
               </span>
             )}
             {/* Forma */}
-            <div className={`mt-0.5 h-0.5 w-8 rounded-full ${jugador.formaFisica > 80 ? 'bg-teal-400' : jugador.formaFisica > 60 ? 'bg-amber-400' : 'bg-rose-400'}`} style={{ width: `${(jugador.formaFisica / 100) * 48}px` }} />
+            <div className="mt-1.5 h-1 w-6 md:w-8 bg-slate-800 rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all ${jugador.formaFisica > 80 ? 'bg-teal-400' : jugador.formaFisica > 60 ? 'bg-amber-400' : 'bg-rose-400'}`}
+                style={{ width: `${jugador.formaFisica}%` }}
+              />
+            </div>
           </div>
         ) : (
           /* NODO VACÍO */
           <div
             className={`
               flex flex-col items-center gap-1 transition-all duration-150
-              ${isOver
-                ? 'scale-110'
-                : ''
-              }
+              ${isOver || jugadorSeleccionadoId ? 'scale-110' : ''}
             `}
           >
             <div className={`
-              w-12 h-12 rounded-full border-2 border-dashed flex items-center justify-center transition-all duration-150
+              w-10 h-10 md:w-12 md:h-12 rounded-full border-2 border-dashed flex items-center justify-center transition-all duration-150
               ${isOver
                 ? 'border-teal-400 bg-teal-500/15 shadow-lg shadow-teal-500/20 scale-110'
-                : 'border-white/20 bg-white/3 hover:border-white/35'
+                : jugadorSeleccionadoId
+                  ? 'border-teal-500/50 bg-teal-500/5 animate-pulse'
+                  : 'border-white/20 bg-white/3 hover:border-white/35'
               }
             `}>
-              <span className={`text-[9px] font-extrabold uppercase tracking-wider ${isOver ? 'text-teal-300' : 'text-white/30'}`}>
+              <span className={`text-[8px] md:text-[9px] font-extrabold uppercase tracking-wider ${isOver || jugadorSeleccionadoId ? 'text-teal-300' : 'text-white/30'}`}>
                 {nodo.label}
               </span>
             </div>
-            <span className={`text-[8px] font-bold uppercase tracking-widest leading-none ${isOver ? 'text-teal-400' : 'text-white/20'}`}>
-              {isOver ? 'Soltar' : nodo.label}
+            <span className={`text-[7px] md:text-[8px] font-bold uppercase tracking-widest leading-none ${isOver || jugadorSeleccionadoId ? 'text-teal-400' : 'text-white/20'}`}>
+              {isOver ? 'Soltar' : jugadorSeleccionadoId ? 'Poner' : nodo.label}
             </span>
           </div>
         )}
@@ -773,7 +819,24 @@ export const TacticaView: React.FC = () => {
             onDragOver={handleDragOverBench}
             onDragLeave={() => setDragOverBench(false)}
             onDrop={handleDropOnBench}
-            className={`rounded-2xl border p-4 transition-all duration-200 ${
+            onClick={() => {
+              if (jugadorSeleccionadoId) {
+                const jId = jugadorSeleccionadoId;
+                // Si el jugador seleccionado estaba en un nodo, quitarlo
+                setNodosState(prev => {
+                  const nuevo = { ...prev };
+                  Object.keys(nuevo).forEach(k => {
+                    if (nuevo[k] === jId) nuevo[k] = null;
+                  });
+                  setTimeout(() => {
+                    actualizarPosicionesTacticas(nuevo);
+                  }, 0);
+                  return nuevo;
+                });
+                setJugadorSeleccionadoId(null);
+              }
+            }}
+            className={`rounded-2xl border p-4 cursor-pointer transition-all duration-200 ${
               dragOverBench
                 ? 'bg-slate-700/30 border-slate-500 shadow-inner'
                 : 'bg-slate-900/50 border-slate-800'
@@ -923,35 +986,35 @@ export const TacticaView: React.FC = () => {
             </svg>
 
             {/* JUGADORES EN CANCHA */}
-            <div className="relative z-10 flex flex-col justify-between py-10 px-6 min-h-[560px]">
+            <div className="relative z-10 flex flex-col justify-between py-6 md:py-10 px-1 md:px-6 min-h-[460px] md:min-h-[560px]">
               {/* Etiqueta Visitante */}
               <div className="text-center mb-2">
                 <span className="text-[9px] font-extrabold uppercase tracking-[0.2em] text-white/20">Arco Visitante</span>
               </div>
 
               {/* DEL */}
-              <div className="flex items-center justify-around px-4 py-2">
+              <div className="flex items-center justify-around px-1 md:px-4 py-1.5 md:py-2">
                 {nodosPorLinea.DEL.map(nodo => (
                   <NodoCancha key={`${nodo.linea}-${nodo.index}`} nodo={nodo} />
                 ))}
               </div>
 
               {/* MED */}
-              <div className="flex items-center justify-around px-2 py-2">
+              <div className="flex items-center justify-around px-1 md:px-2 py-1.5 md:py-2">
                 {nodosPorLinea.MED.map(nodo => (
                   <NodoCancha key={`${nodo.linea}-${nodo.index}`} nodo={nodo} />
                 ))}
               </div>
 
               {/* DEF */}
-              <div className="flex items-center justify-around px-4 py-2">
+              <div className="flex items-center justify-around px-1 md:px-4 py-1.5 md:py-2">
                 {nodosPorLinea.DEF.map(nodo => (
                   <NodoCancha key={`${nodo.linea}-${nodo.index}`} nodo={nodo} />
                 ))}
               </div>
 
               {/* POR */}
-              <div className="flex items-center justify-center py-2">
+              <div className="flex items-center justify-center py-1.5 md:py-2">
                 {nodosPorLinea.POR.map(nodo => (
                   <NodoCancha key={`${nodo.linea}-${nodo.index}`} nodo={nodo} />
                 ))}

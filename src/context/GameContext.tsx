@@ -1,8 +1,8 @@
 // @refresh reset
 import React, { createContext, useContext, useState, ReactNode, useCallback } from 'react';
-import { Equipo, Jugador, Liga, TablaEquipo, Jornada, Formacion, EstiloJuego, OpcionPrensa, RuedaPrensa, OfertaRecibida, Posicion, PersonalidadJugador, CharlaJugador, AcademiaReporte, CopaCampeones, TablaCopa, PartidoCopa, GrupoCopa, AtributosJugador, PromesaGestion, EventoVestuario, OpcionEvento, JugadorAgente, ReunionPrivada, SorteoCopaActivo, FanTweet } from '../types';
+import { Equipo, Jugador, Liga, TablaEquipo, Jornada, Formacion, EstiloJuego, OpcionPrensa, RuedaPrensa, OfertaRecibida, Posicion, PersonalidadJugador, CharlaJugador, AcademiaReporte, CopaCampeones, TablaCopa, PartidoCopa, GrupoCopa, AtributosJugador, PromesaGestion, EventoVestuario, OpcionEvento, JugadorAgente, ReunionPrivada, SorteoCopaActivo, FanTweet, Tutoria } from '../types';
 import { equiposIniciales, jugadoresIniciales, ligaInicial, fixtureInicial, generarNewgen, generarFixtureRoundRobin, equiposLaLiga, equiposPremier, equiposSerieA, equiposBundesliga, randomRange } from '../data/initialData';
-import { simularPartido } from '../engine/matchEngine';
+import { simularPartido, obtenerCategoriaPosicion } from '../engine/matchEngine';
 
 export interface PartidoSimuladoDetalle {
   golesLocal: number;
@@ -88,6 +88,8 @@ export interface GameContextProps {
   resolverEvento: (opcionId: string) => void;
   avanzarHoraDeadline: () => void;
   comprarJugadorAgente: (agenteId: string) => { aceptado: boolean; mensaje: string };
+  iniciarProyectoConstruccion: (tipo: 'estadio' | 'clinica' | 'academia') => { aceptado: boolean; mensaje: string };
+  iniciarTutoria: (veteranoId: string, juvenilId: string) => { aceptado: boolean; mensaje: string };
 }
 
 export const GameContext = createContext<GameContextProps | undefined>(undefined);
@@ -116,6 +118,195 @@ const calcularRecaudacionTaquilla = (club: Equipo): { asistencia: number; precio
   const precioTicket = 30 + (club.reputacion - 50) * 0.5;
   const recaudacion = Math.round(asistencia * precioTicket);
   return { asistencia, precioTicket, recaudacion };
+};
+
+const procesarPasoDelDiaEquipos = (
+  actualEquipos: Equipo[]
+): { equiposActualizados: Equipo[]; noticiasProyectos: string[] } => {
+  const noticiasProyectos: string[] = [];
+  const equiposActualizados = actualEquipos.map(e => {
+    if (!e.proyectosConstruccion || e.proyectosConstruccion.length === 0) return e;
+
+    const proyectosNuevos = e.proyectosConstruccion.map(p => ({
+      ...p,
+      diasRestantes: p.diasRestantes - 1
+    }));
+
+    const completados = proyectosNuevos.filter(p => p.diasRestantes <= 0);
+    const pendientes = proyectosNuevos.filter(p => p.diasRestantes > 0);
+
+    if (completados.length === 0) {
+      return {
+        ...e,
+        proyectosConstruccion: pendientes
+      };
+    }
+
+    let newCapacidad = e.capacidadEstadio;
+    let newClinica = e.nivelInstalacionesMedicas || 1;
+    let newAcademia = e.nivelAcademiaJuvenil || 1;
+
+    completados.forEach(p => {
+      if (p.tipo === 'estadio') {
+        newCapacidad += 5000;
+        noticiasProyectos.push(
+          `🏗️ [Infraestructura] ¡Inauguración! Las obras de ampliación del estadio de ${e.nombre} han finalizado. Nueva capacidad: ${newCapacidad.toLocaleString('de-DE')} espectadores.`
+        );
+      } else if (p.tipo === 'clinica') {
+        newClinica = Math.min(5, newClinica + 1);
+        noticiasProyectos.push(
+          `🏗️ [Infraestructura] ¡Obra Terminada! La Clínica Médica de ${e.nombre} ha sido mejorada al Nivel ${newClinica}. Menor tiempo de baja para lesionados.`
+        );
+      } else if (p.tipo === 'academia') {
+        newAcademia = Math.min(5, newAcademia + 1);
+        noticiasProyectos.push(
+          `🏗️ [Infraestructura] ¡Obra Terminada! La Academia Juvenil de ${e.nombre} ha sido mejorada al Nivel ${newAcademia}. Mayor probabilidad de joyas de la cantera.`
+        );
+      }
+    });
+
+    return {
+      ...e,
+      capacidadEstadio: newCapacidad,
+      nivelInstalacionesMedicas: newClinica,
+      nivelAcademiaJuvenil: newAcademia,
+      proyectosConstruccion: pendientes
+    };
+  });
+
+  return { equiposActualizados, noticiasProyectos };
+};
+
+const RASGOS_POR_POSICION: Record<string, string[]> = {
+  POR: ['Evita dar rebote', 'Sale rápido en contragolpe', 'Fuerte en el uno contra uno'],
+  DEF: ['Marca de cerca', 'Se barre a tiempo', 'Salida limpia por abajo', 'Evita subir al ataque'],
+  MED: ['Dicta el ritmo de juego', 'Pases al hueco', 'Llega desde segunda línea', 'Busca pases de primera'],
+  DEL: ['Remata de primera', 'Regate hacia adentro', 'Dispara de lejos', 'Corta hacia adentro desde la banda']
+};
+
+export const generarRasgosAleatorios = (pos: Posicion): string[] => {
+  const cat = obtenerCategoriaPosicion(pos);
+  const opciones = RASGOS_POR_POSICION[cat] || RASGOS_POR_POSICION['DEL'];
+  const n = Math.random() < 0.5 ? 1 : 2;
+  const mezclados = [...opciones].sort(() => 0.5 - Math.random());
+  return mezclados.slice(0, n);
+};
+
+const sonPersonalidadesChocantes = (p1: string, p2: string): boolean => {
+  return (
+    (p1 === 'Problemático' && ['Profesional', 'Líder', 'Leal', 'Ambicioso'].includes(p2)) ||
+    (p2 === 'Problemático' && ['Profesional', 'Líder', 'Leal', 'Ambicioso'].includes(p1))
+  );
+};
+
+const procesarPasoDelDiaTutorias = (
+  actualEquipos: Equipo[],
+  actualesJugadores: Jugador[],
+  equipoUsuarioId: string | null,
+  diasARestar: number = 1
+): {
+  equiposActualizados: Equipo[];
+  jugadoresActualizados: Jugador[];
+  noticiasTutorias: string[];
+} => {
+  const noticiasTutorias: string[] = [];
+  let jugadoresModificados = [...actualesJugadores];
+
+  const equiposActualizados = actualEquipos.map(e => {
+    if (!e.tutorias || e.tutorias.length === 0) return e;
+
+    const tutoriasNuevas = e.tutorias.map(t => ({
+      ...t,
+      diasRestantes: t.diasRestantes - diasARestar
+    }));
+
+    const completadas = tutoriasNuevas.filter(t => t.diasRestantes <= 0);
+    const pendientes = tutoriasNuevas.filter(t => t.diasRestantes > 0);
+
+    completadas.forEach(t => {
+      const idxVet = jugadoresModificados.findIndex(j => j.id === t.veteranoId);
+      const idxJuv = jugadoresModificados.findIndex(j => j.id === t.juvenilId);
+
+      if (idxVet !== -1 && idxJuv !== -1) {
+        const vet = jugadoresModificados[idxVet];
+        const juv = jugadoresModificados[idxJuv];
+
+        const chocantes = sonPersonalidadesChocantes(vet.personalidad, juv.personalidad);
+        const falla = chocantes && Math.random() < 0.20;
+
+        if (falla) {
+          jugadoresModificados[idxVet] = {
+            ...vet,
+            moral: Math.max(1, vet.moral - 25)
+          };
+          jugadoresModificados[idxJuv] = {
+            ...juv,
+            moral: Math.max(1, juv.moral - 25)
+          };
+          noticiasTutorias.push(
+            `⚠️ [Tutoría Fallida] La relación de mentoreo entre ${vet.nombre} y el juvenil ${juv.nombre} ha colapsado debido a diferencias irreconciliables de personalidad. La moral de ambos bajó y se rompió la tutoría.`
+          );
+        } else {
+          let subioDet = false;
+          let cambioPers = false;
+          let copioRasgo = '';
+
+          let juvAtributos = { ...juv.atributos };
+          let juvPersonalidad = juv.personalidad;
+          let juvRasgos = juv.rasgos ? [...juv.rasgos] : [];
+
+          if (vet.atributos.determinacion > juv.atributos.determinacion) {
+            juvAtributos.determinacion = Math.min(20, juv.atributos.determinacion + 2);
+            juvPersonalidad = 'Profesional';
+            subioDet = true;
+            cambioPers = true;
+          }
+
+          if (Math.random() < 0.50 && vet.rasgos && vet.rasgos.length > 0) {
+            const opcionesCopiar = vet.rasgos.filter(r => !juvRasgos.includes(r));
+            if (opcionesCopiar.length > 0) {
+              const rasgoElegido = opcionesCopiar[Math.floor(Math.random() * opcionesCopiar.length)];
+              juvRasgos.push(rasgoElegido);
+              copioRasgo = rasgoElegido;
+            }
+          }
+
+          jugadoresModificados[idxJuv] = {
+            ...juv,
+            atributos: juvAtributos,
+            personalidad: juvPersonalidad,
+            rasgos: juvRasgos,
+            moral: Math.min(100, juv.moral + 15)
+          };
+
+          jugadoresModificados[idxVet] = {
+            ...vet,
+            moral: Math.min(100, vet.moral + 10)
+          };
+
+          let msg = `🎓 [Tutoría Finalizada] ¡Éxito! El juvenil ${juv.nombre} completó su tutoría con ${vet.nombre}.`;
+          if (subioDet) {
+            msg += ` Aumenta su determinación (+2) y su personalidad ahora es Profesional.`;
+          }
+          if (copioRasgo) {
+            msg += ` Incorpora el rasgo '${copioRasgo}'.`;
+          }
+          noticiasTutorias.push(msg);
+        }
+      }
+    });
+
+    return {
+      ...e,
+      tutorias: pendientes
+    };
+  });
+
+  return {
+    equiposActualizados,
+    jugadoresActualizados: jugadoresModificados,
+    noticiasTutorias
+  };
 };
 
 const inicializarCopa = (
@@ -905,17 +1096,24 @@ const generarReunionPrivada = (plantelCompleto: Jugador[], equipoUsuarioId: stri
 export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   // --- ESTADOS DE LA PARTIDA ---
   const [equipos, setEquipos] = useState<Equipo[]>(() => {
-    return equiposIniciales.map(e => ({
-      ...e,
-      formacion: e.formacion || '4-3-3',
-      estiloJuego: e.estiloJuego || 'Equilibrado'
-    }));
+    return equiposIniciales.map(e => {
+      const initialLevel = e.reputacion >= 85 ? 4 : e.reputacion >= 70 ? 3 : e.reputacion >= 55 ? 2 : 1;
+      return {
+        ...e,
+        formacion: e.formacion || '4-3-3',
+        estiloJuego: e.estiloJuego || 'Equilibrado',
+        nivelInstalacionesMedicas: e.nivelInstalacionesMedicas || initialLevel,
+        nivelAcademiaJuvenil: e.nivelAcademiaJuvenil || initialLevel,
+        proyectosConstruccion: e.proyectosConstruccion || []
+      };
+    });
   });
   const [jugadores, setJugadores] = useState<Jugador[]>(() => {
     const playersWithTitular = jugadoresIniciales.map(j => ({
       ...j,
       titular: false,
-      mesesContrato: j.mesesContrato !== undefined ? j.mesesContrato : Math.floor(Math.random() * 25) + 6
+      mesesContrato: j.mesesContrato !== undefined ? j.mesesContrato : Math.floor(Math.random() * 25) + 6,
+      rasgos: j.rasgos || generarRasgosAleatorios(j.posicion)
     }));
     const teamIds = Array.from(new Set(playersWithTitular.map(p => p.idEquipo)));
     teamIds.forEach(teamId => {
@@ -2063,9 +2261,19 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           return e;
         });
 
+        const { equiposActualizados, noticiasProyectos } = procesarPasoDelDiaEquipos(finalEquiposConCopa);
+        const { equiposActualizados: equiposFinales, jugadoresActualizados, noticiasTutorias } = 
+          procesarPasoDelDiaTutorias(equiposActualizados, finalJugadores, equipoUsuarioId);
+
         setFechaActual(nuevaFecha);
-        setJugadores(finalJugadores);
-        setEquipos(finalEquiposConCopa);
+        setJugadores(jugadoresActualizados);
+        setEquipos(equiposFinales);
+        if (noticiasProyectos.length > 0) {
+          nuevasNoticias.push(...noticiasProyectos);
+        }
+        if (noticiasTutorias.length > 0) {
+          nuevasNoticias.push(...noticiasTutorias);
+        }
 
         const oferta = intentarGenerarOfertaIA(nuevaFecha, finalJugadores);
         if (oferta) {
@@ -2288,9 +2496,19 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       // Ejecutar el scouting y fichajes automáticos de la IA en segundo plano
       const { nuevosJugadores: finalJugadores, nuevosEquipos: finalEquipos, nuevasNoticiasTransfer } = procesarMercadoFichajesIA(nuevaFecha, stepJugadores, equipos);
 
+      const { equiposActualizados, noticiasProyectos } = procesarPasoDelDiaEquipos(finalEquipos);
+      const { equiposActualizados: equiposFinales, jugadoresActualizados, noticiasTutorias } = 
+        procesarPasoDelDiaTutorias(equiposActualizados, finalJugadores, equipoUsuarioId);
+
       setFechaActual(nuevaFecha);
-      setJugadores(finalJugadores);
-      setEquipos(finalEquipos);
+      setJugadores(jugadoresActualizados);
+      setEquipos(equiposFinales);
+      if (noticiasProyectos.length > 0) {
+        nuevasNoticias.push(...noticiasProyectos);
+      }
+      if (noticiasTutorias.length > 0) {
+        nuevasNoticias.push(...noticiasTutorias);
+      }
 
       // Intentar generar oferta IA por el usuario
       const oferta = intentarGenerarOfertaIA(nuevaFecha, finalJugadores);
@@ -2339,7 +2557,24 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         ]);
       }
     }
-  }, [fechaActual, equipos, jugadores, equipoUsuarioId, procesarFinanzasSemanales, intentarGenerarOfertaIA, procesarMercadoFichajesIA, fixture, eventoActivo]);
+  }, [
+    fechaActual,
+    equipos,
+    jugadores,
+    equipoUsuarioId,
+    procesarFinanzasSemanales,
+    intentarGenerarOfertaIA,
+    procesarMercadoFichajesIA,
+    fixture,
+    eventoActivo,
+    reunionPrivadaActiva,
+    copaCampeones,
+    copaEuropa,
+    sorteoCampeonesGruposVisto,
+    sorteoEuropaGruposVisto,
+    sorteoCampeonesCuartosVisto,
+    sorteoEuropaCuartosVisto
+  ]);
 
   // ============================================================
   // AVANZAR 1 HORA EN DEADLINE DAY
@@ -2393,6 +2628,21 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setDeadlineDayActivo(false);
       setJugadoresAgentes([]);
       noticiasCierre.push(`🔒 [MERCADO CERRADO] El mercado de pases ha cerrado definitivamente. No se pueden realizar mas operaciones hasta la proxima ventana.`);
+      
+      setJugadores(oldJugadores => {
+        const { equiposActualizados, noticiasProyectos } = procesarPasoDelDiaEquipos(equipos);
+        const { equiposActualizados: equiposFinales, jugadoresActualizados, noticiasTutorias } = 
+          procesarPasoDelDiaTutorias(equiposActualizados, oldJugadores, equipoUsuarioId);
+          
+        setEquipos(equiposFinales);
+        if (noticiasProyectos.length > 0) {
+          noticiasCierre.push(...noticiasProyectos);
+        }
+        if (noticiasTutorias.length > 0) {
+          noticiasCierre.push(...noticiasTutorias);
+        }
+        return jugadoresActualizados;
+      });
     }
 
     // 4. Alertas de tiempo
@@ -2469,6 +2719,170 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return { aceptado: true, mensaje };
   }, [equipoUsuarioId, jugadoresAgentes, equipos, generarFeedHinchada]);
 
+  // ============================================================
+  // INICIAR PROYECTO DE CONSTRUCCIÓN / MEJORA
+  // ============================================================
+  const iniciarProyectoConstruccion = useCallback((tipo: 'estadio' | 'clinica' | 'academia'): { aceptado: boolean; mensaje: string } => {
+    if (!equipoUsuarioId) return { aceptado: false, mensaje: 'No tienes un club asignado.' };
+
+    const userClub = equipos.find(e => e.id === equipoUsuarioId);
+    if (!userClub) return { aceptado: false, mensaje: 'No se encontró tu club.' };
+
+    const nivelClinica = userClub.nivelInstalacionesMedicas || 1;
+    const nivelAcademia = userClub.nivelAcademiaJuvenil || 1;
+
+    // Verificar si ya hay un proyecto del mismo tipo en construcción
+    const proyectoExistente = userClub.proyectosConstruccion?.find(p => p.tipo === tipo);
+    if (proyectoExistente) {
+      return { 
+        aceptado: false, 
+        mensaje: `Ya hay una obra de ${tipo === 'estadio' ? 'ampliación de estadio' : tipo === 'clinica' ? 'mejora de clínica' : 'mejora de academia'} en curso.` 
+      };
+    }
+
+    let costo = 0;
+    const duracion = 30; // 30 días simulados
+
+    if (tipo === 'estadio') {
+      costo = 5000000; // 5,000,000 €
+    } else if (tipo === 'clinica') {
+      if (nivelClinica >= 5) {
+        return { aceptado: false, mensaje: 'La clínica médica ya está al nivel máximo (5).' };
+      }
+      costo = 3000000 * nivelClinica; // 3,000,000 € * nivelActual
+    } else if (tipo === 'academia') {
+      if (nivelAcademia >= 5) {
+        return { aceptado: false, mensaje: 'La academia juvenil ya está al nivel máximo (5).' };
+      }
+      costo = 4000000 * nivelAcademia; // 4,000,000 € * nivelActual
+    }
+
+    if (userClub.presupuestoFichajes < costo) {
+      return { 
+        aceptado: false, 
+        mensaje: `Presupuesto insuficiente. Se requieren ${new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(costo)} y solo posees ${new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(userClub.presupuestoFichajes)}.` 
+      };
+    }
+
+    // Restar el presupuesto y añadir el proyecto
+    setEquipos(prev => prev.map(e => {
+      if (e.id === equipoUsuarioId) {
+        const proyectos = e.proyectosConstruccion || [];
+        return {
+          ...e,
+          presupuestoFichajes: e.presupuestoFichajes - costo,
+          proyectosConstruccion: [
+            ...proyectos,
+            {
+              tipo,
+              diasRestantes: duracion,
+              diasTotales: duracion
+            }
+          ]
+        };
+      }
+      return e;
+    }));
+
+    const nombresProyectos = {
+      estadio: 'ampliación del Estadio',
+      clinica: 'mejora de la Clínica Médica',
+      academia: 'mejora de la Academia Juvenil'
+    };
+
+    setNoticias(prev => [
+      `🏗️ [Infraestructura] ¡Comenzó la obra! El club ha iniciado la construcción para la ${nombresProyectos[tipo]} por un costo de ${new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(costo)}. Se estima finalizada en 30 días.`,
+      ...prev
+    ]);
+
+    return { aceptado: true, mensaje: 'El proyecto de construcción ha iniciado con éxito.' };
+  }, [equipoUsuarioId, equipos]);
+
+  // ============================================================
+  // INICIAR TUTORÍA / MENTOREO ENTRE VETERANO Y JUVENIL
+  // ============================================================
+  const iniciarTutoria = useCallback((veteranoId: string, juvenilId: string): { aceptado: boolean; mensaje: string } => {
+    if (!equipoUsuarioId) return { aceptado: false, mensaje: 'No tienes un club asignado.' };
+
+    const vet = jugadores.find(j => j.id === veteranoId);
+    const juv = jugadores.find(j => j.id === juvenilId);
+
+    if (!vet || !juv) {
+      return { aceptado: false, mensaje: 'Jugador mentor o aprendiz no encontrado.' };
+    }
+
+    // Validar edad veterano (> 30)
+    if (vet.edad <= 30) {
+      return { aceptado: false, mensaje: `El mentor ${vet.nombre} debe ser veterano (mayor de 30 años).` };
+    }
+
+    // Validar edad juvenil (< 20)
+    if (juv.edad >= 20) {
+      return { aceptado: false, mensaje: `El aprendiz ${juv.nombre} debe ser juvenil (menor de 20 años).` };
+    }
+
+    // Validar posición similar
+    if (obtenerCategoriaPosicion(vet.posicion) !== obtenerCategoriaPosicion(juv.posicion)) {
+      return { 
+        aceptado: false, 
+        mensaje: `Los jugadores deben jugar en posiciones similares. ${vet.nombre} es ${vet.posicion} y ${juv.nombre} es ${juv.posicion}.` 
+      };
+    }
+
+    // Validar que pertenezcan al mismo club y sea del usuario
+    if (vet.idEquipo !== equipoUsuarioId || juv.idEquipo !== equipoUsuarioId) {
+      return { aceptado: false, mensaje: 'Ambos jugadores deben pertenecer a tu plantel.' };
+    }
+
+    // Validar que no tengan tutorías activas
+    const userClub = equipos.find(e => e.id === equipoUsuarioId);
+    if (!userClub) return { aceptado: false, mensaje: 'Club no encontrado.' };
+
+    const tutoriasActivas = userClub.tutorias || [];
+    const vetOcupado = tutoriasActivas.some(t => t.veteranoId === veteranoId || t.juvenilId === veteranoId);
+    const juvOcupado = tutoriasActivas.some(t => t.veteranoId === juvenilId || t.juvenilId === juvenilId);
+
+    if (vetOcupado) {
+      return { aceptado: false, mensaje: `${vet.nombre} ya participa en un grupo de tutoría activo.` };
+    }
+    if (juvOcupado) {
+      return { aceptado: false, mensaje: `${juv.nombre} ya participa en un grupo de tutoría activo.` };
+    }
+
+    // Iniciar tutoría
+    setEquipos(prev => prev.map(e => {
+      if (e.id === equipoUsuarioId) {
+        const tuts = e.tutorias || [];
+        return {
+          ...e,
+          tutorias: [
+            ...tuts,
+            {
+              id: `tutoria-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+              veteranoId,
+              veteranoNombre: vet.nombre,
+              juvenilId,
+              juvenilNombre: juv.nombre,
+              diasRestantes: 180, // 6 meses simulados
+              diasTotales: 180
+            }
+          ]
+        };
+      }
+      return e;
+    }));
+
+    setNoticias(prev => [
+      `🤝 [Tutoría Iniciada] El veterano ${vet.nombre} comenzó a apadrinar al juvenil ${juv.nombre} en los entrenamientos diarios.`,
+      ...prev
+    ]);
+
+    return { 
+      aceptado: true, 
+      mensaje: `¡Tutoría iniciada! ${vet.nombre} guiará a ${juv.nombre} durante los próximos 6 meses.` 
+    };
+  }, [equipoUsuarioId, jugadores, equipos]);
+
   // Cerrar el reporte del partido disputado y avanzar automáticamente de fecha en el calendario
   const cerrarPartidoReciente = useCallback(() => {
     setPartidoReciente(null);
@@ -2490,9 +2904,19 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     // Ejecutar el scouting y fichajes automáticos de la IA en segundo plano
     const { nuevosJugadores: finalJugadores, nuevosEquipos: finalEquipos, nuevasNoticiasTransfer } = procesarMercadoFichajesIA(nuevaFecha, stepJugadores, equipos);
 
+    const { equiposActualizados, noticiasProyectos } = procesarPasoDelDiaEquipos(finalEquipos);
+    const { equiposActualizados: equiposFinales, jugadoresActualizados, noticiasTutorias } = 
+      procesarPasoDelDiaTutorias(equiposActualizados, finalJugadores, equipoUsuarioId);
+
     setFechaActual(nuevaFecha);
-    setJugadores(finalJugadores);
-    setEquipos(finalEquipos);
+    setJugadores(jugadoresActualizados);
+    setEquipos(equiposFinales);
+    if (noticiasProyectos.length > 0) {
+      nuevasNoticias.push(...noticiasProyectos);
+    }
+    if (noticiasTutorias.length > 0) {
+      nuevasNoticias.push(...noticiasTutorias);
+    }
 
     // Intentar generar oferta IA por el usuario
     const oferta = intentarGenerarOfertaIA(nuevaFecha, finalJugadores);
@@ -2539,7 +2963,8 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const playersWithTitular = jugadoresIniciales.map(j => ({
       ...j,
       titular: false,
-      mesesContrato: j.mesesContrato !== undefined ? j.mesesContrato : Math.floor(Math.random() * 25) + 6
+      mesesContrato: j.mesesContrato !== undefined ? j.mesesContrato : Math.floor(Math.random() * 25) + 6,
+      rasgos: j.rasgos || generarRasgosAleatorios(j.posicion)
     }));
     const teamIds = Array.from(new Set(playersWithTitular.map(p => p.idEquipo)));
     teamIds.forEach(teamId => {
@@ -2579,6 +3004,10 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     ]);
     setNombreManager('DT Mánager');
     setReputacionManager(50);
+    setSorteoCampeonesGruposVisto(false);
+    setSorteoEuropaGruposVisto(false);
+    setSorteoCampeonesCuartosVisto(false);
+    setSorteoEuropaCuartosVisto(false);
     setJuegoIniciado(false);
   }, []);
 
@@ -3665,6 +4094,19 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           }
         }
 
+        // Aplicar boost de la academia juvenil al newgen del usuario
+        if (idEquipoNewgen === equipoUsuarioId && equipoUsuarioId) {
+          const userClub = listaEquipos.find(e => e.id === equipoUsuarioId);
+          const nivelAcad = userClub?.nivelAcademiaJuvenil || 1;
+          const chances = [0.05, 0.12, 0.20, 0.35, 0.55]; // Niveles 1 a 5
+          const chance = chances[nivelAcad - 1] ?? 0.05;
+          if (Math.random() < chance) {
+            paNewgen = randomRange(86, 96);
+            caNewgen = randomRange(52, 62);
+            esJoya = true;
+          }
+        }
+
         const newgen = generarNewgen(
           idEquipoNewgen,
           j.posicion,
@@ -3742,35 +4184,62 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const nuevaCopa = inicializarCopa(equipos, nuevaFechaInicioStr, 'champions', clasificadosLigaUsuario, liga.pais);
     const nuevaCopaEu = inicializarCopa(equipos, nuevaFechaInicioStr, 'europa', clasificadosLigaUsuario, liga.pais);
 
-    // Premiar campeones y clasificados
+    // Premiar campeones y clasificados + Completar proyectos de construcción pendientes
     const equiposActualizados = listaEquipos.map(eq => {
-      const idxInTabla = tablaOrdenadaLaLiga.findIndex(t => t.idEquipo === eq.id);
+      let upgradedEq = { ...eq };
+
+      // Auto-completado de obras por fin de temporada
+      if (upgradedEq.proyectosConstruccion && upgradedEq.proyectosConstruccion.length > 0) {
+        let newCapacidad = upgradedEq.capacidadEstadio;
+        let newClinica = upgradedEq.nivelInstalacionesMedicas || 1;
+        let newAcademia = upgradedEq.nivelAcademiaJuvenil || 1;
+
+        upgradedEq.proyectosConstruccion.forEach(p => {
+          if (p.tipo === 'estadio') {
+            newCapacidad += 5000;
+          } else if (p.tipo === 'clinica') {
+            newClinica = Math.min(5, newClinica + 1);
+          } else if (p.tipo === 'academia') {
+            newAcademia = Math.min(5, newAcademia + 1);
+          }
+        });
+
+        upgradedEq = {
+          ...upgradedEq,
+          capacidadEstadio: newCapacidad,
+          nivelInstalacionesMedicas: newClinica,
+          nivelAcademiaJuvenil: newAcademia,
+          proyectosConstruccion: []
+        };
+      }
+
+      const idxInTabla = tablaOrdenadaLaLiga.findIndex(t => t.idEquipo === upgradedEq.id);
       if (idxInTabla === 0) {
         return {
-          ...eq,
-          presupuestoFichajes: eq.presupuestoFichajes + 25000000,
-          reputacion: Math.min(99, eq.reputacion + 5)
+          ...upgradedEq,
+          presupuestoFichajes: upgradedEq.presupuestoFichajes + 25000000,
+          reputacion: Math.min(99, upgradedEq.reputacion + 5)
         };
       } else if (idxInTabla === 1) {
         return {
-          ...eq,
-          presupuestoFichajes: eq.presupuestoFichajes + 15000000,
-          reputacion: Math.min(99, eq.reputacion + 3)
+          ...upgradedEq,
+          presupuestoFichajes: upgradedEq.presupuestoFichajes + 15000000,
+          reputacion: Math.min(99, upgradedEq.reputacion + 3)
         };
       } else if (idxInTabla === 2) {
         return {
-          ...eq,
-          presupuestoFichajes: eq.presupuestoFichajes + 10000000,
-          reputacion: Math.min(99, eq.reputacion + 2)
+          ...upgradedEq,
+          presupuestoFichajes: upgradedEq.presupuestoFichajes + 10000000,
+          reputacion: Math.min(99, upgradedEq.reputacion + 2)
         };
       } else if (idxInTabla === 3) {
         return {
-          ...eq,
-          presupuestoFichajes: eq.presupuestoFichajes + 5000000,
-          reputacion: Math.min(99, eq.reputacion + 1)
+          ...upgradedEq,
+          presupuestoFichajes: upgradedEq.presupuestoFichajes + 5000000,
+          reputacion: Math.min(99, upgradedEq.reputacion + 1)
         };
       }
-      return eq;
+      return upgradedEq;
     });
 
     const campeonClub = equipos.find(e => e.id === tablaOrdenadaLaLiga[0].idEquipo);
@@ -3825,8 +4294,11 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       });
     }
 
-    setEquipos(equiposActualizados);
-    setJugadores(jugadoresFinalesProcesados);
+    const { equiposActualizados: equiposFinTutorias, jugadoresActualizados: jugadoresFinTutorias, noticiasTutorias: noticiasFinTutorias } =
+      procesarPasoDelDiaTutorias(equiposActualizados, jugadoresFinalesProcesados, equipoUsuarioId, 60);
+
+    setEquipos(equiposFinTutorias);
+    setJugadores(jugadoresFinTutorias);
     setFixture(nuevoFixture);
     setLiga(prevLiga => ({
       ...prevLiga,
@@ -3836,6 +4308,10 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setFechaActual(nuevaFechaActual);
     setCopaCampeones(nuevaCopa);
     setCopaEuropa(nuevaCopaEu);
+    setSorteoCampeonesGruposVisto(false);
+    setSorteoEuropaGruposVisto(false);
+    setSorteoCampeonesCuartosVisto(false);
+    setSorteoEuropaCuartosVisto(false);
 
     setReporteAcademia({
       retirados: retiradosList,
@@ -3848,11 +4324,12 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       `🏁 [Fin de Temporada] Ha concluido oficialmente la temporada. ¡Bienvenido a la nueva temporada ${nuevaTemporadaName}!`,
       `📦 [Academia] Se ha publicado el Informe de la Academia con las nuevas promesas de la cantera.`,
       `🏆 [Copas Internacionales] Se han sorteado los fixtures de la Copa de Campeones y la Copa Continental para la nueva temporada.`,
-      ...noticiasCopaRota
+      ...noticiasCopaRota,
+      ...noticiasFinTutorias
     ];
 
     setNoticias(prev => [...nuevasNoticiasCierre, ...prev]);
-  }, [jugadores, equipos, liga, fixture]);
+  }, [jugadores, equipos, liga, fixture, equipoUsuarioId]);
 
   const cerrarReporteAcademia = useCallback(() => {
     setReporteAcademia(null);
@@ -4407,7 +4884,9 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         darCharlaMotivacional,
         organizarActividadCohesion,
         ofrecerContratoLibre,
-        feedHinchada
+        feedHinchada,
+        iniciarProyectoConstruccion,
+        iniciarTutoria
       }}
     >
       {children}

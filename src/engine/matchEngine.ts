@@ -459,7 +459,10 @@ export function simularPartido(
     const baseProb = j.formaFisica < 60 ? 0.04 : j.formaFisica < 80 ? 0.015 : 0.003;
     const probLesion = clima === 'Lluvia Torrencial' ? baseProb + 0.05 : baseProb;
     if (Math.random() < probLesion) {
-      const semanas = Math.floor(Math.random() * 4) + 1;
+      const semanasOriginal = Math.floor(Math.random() * 4) + 1;
+      const nivelMed = local.nivelInstalacionesMedicas ?? 1;
+      const factorReduccion = 1 - (nivelMed - 1) * 0.15;
+      const semanas = Math.max(1, Math.round(semanasOriginal * factorReduccion));
       j.lesionado = true;
       j.semanasLesion = semanas;
       j.semanasLesionado = semanas;
@@ -485,7 +488,10 @@ export function simularPartido(
     const baseProb = j.formaFisica < 85 ? 0.15 : 0.02;
     const probLesion = clima === 'Lluvia Torrencial' ? baseProb + 0.05 : baseProb;
     if (Math.random() < probLesion) {
-      const semanas = Math.floor(Math.random() * 4) + 1;
+      const semanasOriginal = Math.floor(Math.random() * 4) + 1;
+      const nivelMed = visitante.nivelInstalacionesMedicas ?? 1;
+      const factorReduccion = 1 - (nivelMed - 1) * 0.15;
+      const semanas = Math.max(1, Math.round(semanasOriginal * factorReduccion));
       j.lesionado = true;
       j.semanasLesion = semanas;
       j.semanasLesionado = semanas;

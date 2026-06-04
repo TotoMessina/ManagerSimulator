@@ -344,10 +344,8 @@ export const AnaliticaView: React.FC = () => {
           
           {jugadorA && jugadorB && pilaresA && pilaresB ? (
             <svg
-              width="360"
-              height="360"
               viewBox="0 0 400 400"
-              className="mt-6 flex-shrink-0 animate-fade-in relative z-10"
+              className="w-full max-w-[300px] sm:max-w-[360px] aspect-square mt-6 flex-shrink-0 animate-fade-in relative z-10"
             >
               {/* Círculos y Polígonos de Fondo (Escalas del Radar 25%, 50%, 75%, 100%) */}
               {[25, 50, 75, 100].map((nivel) => {

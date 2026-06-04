@@ -18,6 +18,7 @@ import { DeadlineDayView } from './views/DeadlineDayView';
 import { PerfilManagerView } from './views/PerfilManagerView';
 import { OficinaManagerView } from './views/OficinaManagerView';
 import { SorteoCopasView } from './views/SorteoCopasView';
+import { ClubView } from './views/ClubView';
 
 // ==========================================
 // FORMATEADORES AUXILIARES
@@ -97,7 +98,8 @@ const AppContent: React.FC = () => {
   }
 
   // Estados de interfaz
-  const [vista, setVista] = useState<'dashboard' | 'plantel' | 'tabla' | 'mercado' | 'tactica' | 'analitica' | 'copa' | 'entrenamiento' | 'perfil'>('dashboard');
+  const [vista, setVista] = useState<'dashboard' | 'plantel' | 'tabla' | 'mercado' | 'tactica' | 'analitica' | 'copa' | 'entrenamiento' | 'perfil' | 'club'>('dashboard');
+  const [menuAbierto, setMenuAbierto] = useState<boolean>(false);
   const [nombreManagerInput, setNombreManagerInput] = useState<string>('DT Mánager');
   
   // Estados para la selección de equipos
@@ -590,15 +592,14 @@ const AppContent: React.FC = () => {
 
   const jugadoresClub = jugadores.filter(j => j.idEquipo === equipoUsuario!.id);
 
-  return (
-    <>
-    <div className="flex h-screen bg-[#090d16] text-slate-100 font-sans overflow-hidden">
-      
-      {/* ==========================================
-          BARRA LATERAL (SIDEBAR) ESTILO FOOTBALL MANAGER
-          ========================================== */}
-      <aside className="w-72 bg-slate-900 border-r border-slate-800 flex flex-col justify-between z-20 shadow-xl flex-shrink-0">
-        
+  const renderSidebarContent = (closeMobileMenu?: () => void) => {
+    const handleNavigation = (nuevaVista: typeof vista) => {
+      setVista(nuevaVista);
+      if (closeMobileMenu) closeMobileMenu();
+    };
+
+    return (
+      <>
         {/* Cabecera del club y fecha */}
         <div className="flex flex-col flex-1 min-h-0 overflow-y-auto custom-scrollbar">
           <div 
@@ -654,7 +655,7 @@ const AppContent: React.FC = () => {
           {/* Menú de navegación */}
           <nav className="p-4 space-y-1">
             <button
-              onClick={() => setVista('dashboard')}
+              onClick={() => handleNavigation('dashboard')}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-semibold transition-all duration-150 ${
                 vista === 'dashboard'
                   ? 'bg-teal-600 text-white shadow-lg shadow-teal-700/20'
@@ -664,7 +665,7 @@ const AppContent: React.FC = () => {
               <span>🏠</span> Inicio
             </button>
             <button
-              onClick={() => setVista('plantel')}
+              onClick={() => handleNavigation('plantel')}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-semibold transition-all duration-150 ${
                 vista === 'plantel'
                   ? 'bg-teal-600 text-white shadow-lg shadow-teal-700/20'
@@ -674,7 +675,7 @@ const AppContent: React.FC = () => {
               <span>👥</span> Plantel
             </button>
             <button
-              onClick={() => setVista('tactica')}
+              onClick={() => handleNavigation('tactica')}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-semibold transition-all duration-150 ${
                 vista === 'tactica'
                   ? 'bg-teal-600 text-white shadow-lg shadow-teal-700/20'
@@ -684,7 +685,7 @@ const AppContent: React.FC = () => {
               <span>📋</span> Táctica
             </button>
             <button
-              onClick={() => setVista('entrenamiento')}
+              onClick={() => handleNavigation('entrenamiento')}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-semibold transition-all duration-150 ${
                 vista === 'entrenamiento'
                   ? 'bg-teal-600 text-white shadow-lg shadow-teal-700/20'
@@ -694,7 +695,7 @@ const AppContent: React.FC = () => {
               <span>🏋️</span> Entrenamiento
             </button>
             <button
-              onClick={() => setVista('tabla')}
+              onClick={() => handleNavigation('tabla')}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-semibold transition-all duration-150 ${
                 vista === 'tabla'
                   ? 'bg-teal-600 text-white shadow-lg shadow-teal-700/20'
@@ -704,7 +705,7 @@ const AppContent: React.FC = () => {
               <span>📊</span> Tabla de Posiciones
             </button>
             <button
-              onClick={() => setVista('copa')}
+              onClick={() => handleNavigation('copa')}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-semibold transition-all duration-150 ${
                 vista === 'copa'
                   ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg shadow-indigo-900/30'
@@ -714,7 +715,17 @@ const AppContent: React.FC = () => {
               <span>🏆</span> Copa de Campeones
             </button>
             <button
-              onClick={() => setVista('mercado')}
+              onClick={() => handleNavigation('club')}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-semibold transition-all duration-150 ${
+                vista === 'club'
+                  ? 'bg-teal-600 text-white shadow-lg shadow-teal-700/20'
+                  : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/60'
+              }`}
+            >
+              <span>🏛️</span> Club
+            </button>
+            <button
+              onClick={() => handleNavigation('mercado')}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-semibold transition-all duration-150 ${
                 vista === 'mercado'
                   ? 'bg-teal-600 text-white shadow-lg shadow-teal-700/20'
@@ -724,7 +735,7 @@ const AppContent: React.FC = () => {
               <span>🛒</span> Mercado
             </button>
             <button
-              onClick={() => setVista('analitica')}
+              onClick={() => handleNavigation('analitica')}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-semibold transition-all duration-150 ${
                 vista === 'analitica'
                   ? 'bg-teal-600 text-white shadow-lg shadow-teal-700/20'
@@ -734,7 +745,7 @@ const AppContent: React.FC = () => {
               <span>📊</span> Analítica
             </button>
             <button
-              onClick={() => setVista('perfil')}
+              onClick={() => handleNavigation('perfil')}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-semibold transition-all duration-150 ${
                 vista === 'perfil'
                   ? 'bg-teal-600 text-white shadow-lg shadow-teal-700/20'
@@ -750,32 +761,76 @@ const AppContent: React.FC = () => {
         <div className="p-4 border-t border-slate-800 bg-slate-950 space-y-2">
           {/* Botón Avanzar Día */}
           <button
-            onClick={avanzarDia}
+            onClick={() => {
+              avanzarDia();
+              if (closeMobileMenu) closeMobileMenu();
+            }}
             className="w-full py-3 bg-gradient-to-r from-teal-500 to-emerald-600 hover:from-teal-400 hover:to-emerald-500 text-white font-bold rounded-lg text-xs uppercase tracking-wider shadow-md hover:shadow-lg active:scale-95 transform transition-all duration-150"
           >
             ⏭️ Avanzar Día (+2 Forma)
           </button>
           
           <button
-            onClick={reiniciarPartida}
+            onClick={() => {
+              reiniciarPartida();
+              if (closeMobileMenu) closeMobileMenu();
+            }}
             className="w-full py-2 bg-slate-900 border border-slate-800 text-slate-500 hover:text-rose-400 hover:border-rose-950 hover:bg-rose-950/20 rounded-lg text-[10px] uppercase font-bold tracking-wider transition-all"
           >
             ⚠️ Abandonar Partida
           </button>
         </div>
+      </>
+    );
+  };
+
+  return (
+    <>
+    <div className="flex h-screen bg-[#090d16] text-slate-100 font-sans overflow-hidden">
+      
+      {/* ==========================================
+          BARRA LATERAL (SIDEBAR) ESTILO FOOTBALL MANAGER
+          ========================================== */}
+      <aside className="hidden md:flex w-72 bg-slate-900 border-r border-slate-800 flex-col justify-between z-20 shadow-xl flex-shrink-0">
+        {renderSidebarContent()}
       </aside>
+
+      {/* Sidebar Móvil (Drawer) */}
+      {menuAbierto && (
+        <div className="fixed inset-0 z-40 md:hidden">
+          {/* Backdrop */}
+          <div 
+            onClick={() => setMenuAbierto(false)} 
+            className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm transition-opacity"
+          />
+          {/* Sidebar Panel */}
+          <aside className="fixed top-0 bottom-0 left-0 w-72 bg-slate-900 border-r border-slate-800 flex flex-col justify-between z-50 shadow-2xl animate-fade-in">
+            {renderSidebarContent(() => setMenuAbierto(false))}
+          </aside>
+        </div>
+      )}
 
       {/* ==========================================
           SECCIÓN PRINCIPAL DE CONTENIDO
           ========================================== */}
       <main className="flex-1 overflow-y-auto relative flex flex-col">
         {/* Cabecera superior interna */}
-        <header className="h-16 bg-slate-900/50 backdrop-blur-md border-b border-slate-800 px-8 flex items-center justify-between flex-shrink-0 z-10">
-          <div className="flex items-center gap-2">
-            <span className="text-xs uppercase font-bold text-slate-400 tracking-widest">Liga simulada</span>
-            <span className="bg-blue-500/10 text-blue-400 text-[10px] font-extrabold px-2 py-0.5 rounded border border-blue-500/20">
-              {liga.nombre}
-            </span>
+        <header className="h-16 bg-slate-900/50 backdrop-blur-md border-b border-slate-800 px-4 md:px-8 flex items-center justify-between flex-shrink-0 z-10">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setMenuAbierto(true)}
+              className="md:hidden p-2 -ml-2 text-slate-400 hover:text-white focus:outline-none"
+            >
+              <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            </button>
+            <div className="flex items-center gap-2">
+              <span className="text-xs uppercase font-bold text-slate-400 tracking-widest hidden sm:inline">Liga simulada</span>
+              <span className="bg-blue-500/10 text-blue-400 text-[10px] font-extrabold px-2 py-0.5 rounded border border-blue-500/20">
+                {liga.nombre}
+              </span>
+            </div>
           </div>
 
           <div className="text-xs font-medium text-slate-400">
@@ -784,7 +839,7 @@ const AppContent: React.FC = () => {
         </header>
 
         {/* Carga del Contenido de Vistas */}
-        <div className="flex-1 p-8 overflow-y-auto max-w-7xl w-full mx-auto">
+        <div className="flex-1 p-4 md:p-8 overflow-y-auto max-w-7xl w-full mx-auto">
           
           {/* VISTA 1: DASHBOARD (INICIO DESDE COMPONENTE MODULAR) */}
           {vista === 'dashboard' && (
@@ -824,6 +879,11 @@ const AppContent: React.FC = () => {
           {/* VISTA 6: COPA INTERNACIONAL (COPA DE CAMPEONES) */}
           {vista === 'copa' && (
             <CopaInternacionalView />
+          )}
+
+          {/* VISTA CLUB E INFRAESTRUCTURA */}
+          {vista === 'club' && (
+            <ClubView />
           )}
 
           {/* VISTA 7: PERFIL MÁNAGER & OFERTAS DE EMPLEO */}

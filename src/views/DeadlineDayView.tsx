@@ -44,18 +44,18 @@ const Countdown: React.FC<{ horas: number }> = ({ horas }) => {
   const border = critico ? 'border-red-500/50' : 'border-cyan-500/30';
 
   return (
-    <div className={`relative rounded-2xl border ${border} ${glow} bg-black/60 backdrop-blur p-6 text-center`}>
+    <div className={`relative rounded-2xl border ${border} ${glow} bg-black/60 backdrop-blur p-4 md:p-6 text-center`}>
       {critico && (
         <div className="absolute inset-0 rounded-2xl animate-pulse bg-red-500/5" />
       )}
       <p className="text-xs text-slate-400 uppercase tracking-widest mb-2 font-bold">
         Tiempo restante
       </p>
-      <div className={`font-black tabular-nums ${color} leading-none`}
-        style={{ fontSize: '5rem', textShadow: critico ? '0 0 30px rgba(239,68,68,0.8)' : '0 0 20px rgba(34,211,238,0.7)', animation: critico ? 'pulse 1s ease-in-out infinite' : 'none' }}>
+      <div className={`font-black tabular-nums ${color} leading-none text-5xl md:text-7xl`}
+        style={{ textShadow: critico ? '0 0 30px rgba(239,68,68,0.8)' : '0 0 20px rgba(34,211,238,0.7)', animation: critico ? 'pulse 1s ease-in-out infinite' : 'none' }}>
         {String(horas).padStart(2, '0')}
-        <span className="text-slate-500 mx-1" style={{ fontSize: '3rem' }}>:</span>
-        <span style={{ fontSize: '3rem' }}>00</span>
+        <span className="text-slate-500 mx-1 text-3xl md:text-5xl">:</span>
+        <span className="text-3xl md:text-5xl">00</span>
       </div>
       <p className={`text-xs font-bold mt-2 ${color} uppercase tracking-widest`}>
         {horas === 0 ? '⛔ MERCADO CERRADO' : critico ? '🚨 ÚLTIMAS HORAS' : 'horas : minutos'}
@@ -174,23 +174,23 @@ export const DeadlineDayView: React.FC = () => {
   const presupuesto = equipoUsuario?.presupuestoFichajes ?? 0;
 
   return (
-    <div className="min-h-screen bg-[#04060d] text-slate-100 flex flex-col overflow-hidden" style={{ fontFamily: "'Inter', sans-serif" }}>
+    <div className="min-h-screen bg-[#04060d] text-slate-100 flex flex-col md:overflow-hidden overflow-y-auto" style={{ fontFamily: "'Inter', sans-serif" }}>
 
       {/* ── Ticker ── */}
       <Ticker noticias={noticias} />
 
       {/* ── Header ── */}
-      <div className="relative flex items-center justify-between px-8 py-5 border-b border-slate-800 bg-[#060a14]">
+      <div className="relative flex flex-col sm:flex-row gap-4 items-center justify-between px-4 md:px-8 py-4 md:py-5 border-b border-slate-800 bg-[#060a14]">
         {/* Glow BG */}
         <div className="absolute inset-0 pointer-events-none" style={{ background: critico ? 'radial-gradient(ellipse at 50% 0%, rgba(239,68,68,0.08), transparent 70%)' : 'radial-gradient(ellipse at 50% 0%, rgba(34,211,238,0.06), transparent 70%)' }} />
 
-        <div className="flex items-center gap-4 z-10">
-          <div className={`text-4xl font-black tracking-tighter ${critico ? 'text-red-500' : 'text-cyan-400'}`}
+        <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-4 z-10 text-center sm:text-left">
+          <div className={`text-3xl md:text-4xl font-black tracking-tighter ${critico ? 'text-red-500' : 'text-cyan-400'}`}
             style={{ textShadow: critico ? '0 0 20px rgba(239,68,68,0.8)' : '0 0 20px rgba(34,211,238,0.6)' }}>
             DEADLINE DAY
           </div>
-          <div className={`h-6 w-px ${critico ? 'bg-red-500/40' : 'bg-cyan-500/40'}`} />
-          <div className="text-sm text-slate-400 font-semibold">
+          <div className={`hidden sm:block h-6 w-px ${critico ? 'bg-red-500/40' : 'bg-cyan-500/40'}`} />
+          <div className="text-xs md:text-sm text-slate-400 font-semibold">
             Cierre de Mercado de Pases — Temporada 2026/27
           </div>
         </div>
@@ -198,8 +198,8 @@ export const DeadlineDayView: React.FC = () => {
         <div className="flex items-center gap-6 z-10">
           {/* Budget */}
           <div className="text-right">
-            <p className="text-xs text-slate-500 uppercase tracking-wider">Presupuesto</p>
-            <p className={`text-lg font-black ${presupuesto < 0 ? 'text-red-400' : 'text-white'}`}>
+            <p className="text-[10px] md:text-xs text-slate-500 uppercase tracking-wider">Presupuesto</p>
+            <p className={`text-base md:text-lg font-black ${presupuesto < 0 ? 'text-red-400' : 'text-white'}`}>
               {fmt(Math.abs(presupuesto))}
             </p>
           </div>
@@ -209,7 +209,7 @@ export const DeadlineDayView: React.FC = () => {
 
       {/* ── Offer Alert Banner ── */}
       {ofertaRecibidaActiva && (
-        <div className="mx-6 mt-4 rounded-xl border border-amber-500/50 bg-amber-500/10 px-5 py-3 flex items-center justify-between gap-4"
+        <div className="mx-4 md:mx-6 mt-4 rounded-xl border border-amber-500/50 bg-amber-500/10 px-4 md:px-5 py-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"
           style={{ animation: 'slideDown 0.3s ease both' }}>
           <div className="flex items-center gap-3">
             <span className="text-2xl">🚨</span>
@@ -223,13 +223,13 @@ export const DeadlineDayView: React.FC = () => {
               </p>
             </div>
           </div>
-          <div className="flex gap-2 flex-shrink-0">
+          <div className="flex gap-2 flex-shrink-0 w-full sm:w-auto">
             <button onClick={aceptarOfertaRecibida}
-              className="px-4 py-1.5 rounded-lg bg-green-500/20 border border-green-500/50 text-green-300 text-xs font-bold hover:bg-green-500/30 transition-all">
+              className="flex-1 sm:flex-initial px-4 py-1.5 rounded-lg bg-green-500/20 border border-green-500/50 text-green-300 text-xs font-bold hover:bg-green-500/30 transition-all text-center">
               ✅ Aceptar
             </button>
             <button onClick={rechazarOfertaRecibida}
-              className="px-4 py-1.5 rounded-lg bg-rose-500/20 border border-rose-500/50 text-rose-300 text-xs font-bold hover:bg-rose-500/30 transition-all">
+              className="flex-1 sm:flex-initial px-4 py-1.5 rounded-lg bg-rose-500/20 border border-rose-500/50 text-rose-300 text-xs font-bold hover:bg-rose-500/30 transition-all text-center">
               ❌ Rechazar
             </button>
           </div>
@@ -237,10 +237,10 @@ export const DeadlineDayView: React.FC = () => {
       )}
 
       {/* ── Main Grid ── */}
-      <div className="flex-1 grid grid-cols-12 gap-6 p-6 overflow-hidden min-h-0">
+      <div className="flex-1 grid grid-cols-1 md:grid-cols-12 gap-6 p-4 md:p-6 md:overflow-hidden overflow-y-auto min-h-0">
 
         {/* LEFT — Countdown + Advance */}
-        <div className="col-span-3 flex flex-col gap-5">
+        <div className="col-span-1 md:col-span-3 flex flex-col gap-5">
           <Countdown horas={horasDeadline} />
 
           {/* Advance Button */}
@@ -296,7 +296,7 @@ export const DeadlineDayView: React.FC = () => {
         </div>
 
         {/* CENTER — Free Agents */}
-        <div className="col-span-5 flex flex-col gap-4 overflow-hidden">
+        <div className="col-span-1 md:col-span-5 flex flex-col gap-4 md:overflow-hidden overflow-visible max-h-[500px] md:max-h-none">
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-base font-black text-white tracking-tight">
@@ -330,7 +330,7 @@ export const DeadlineDayView: React.FC = () => {
         </div>
 
         {/* RIGHT — Live Feed */}
-        <div className="col-span-4 flex flex-col gap-4 overflow-hidden">
+        <div className="col-span-1 md:col-span-4 flex flex-col gap-4 md:overflow-hidden overflow-visible max-h-[400px] md:max-h-none">
           <div>
             <h2 className="text-base font-black text-white tracking-tight">
               🗞️ Feed en Tiempo Real
