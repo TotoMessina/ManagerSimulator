@@ -1,6 +1,6 @@
 // @refresh reset
 import React, { createContext, useContext, useState, ReactNode, useCallback } from 'react';
-import { Equipo, Jugador, Liga, TablaEquipo, Jornada, Formacion, EstiloJuego, OpcionPrensa, RuedaPrensa, OfertaRecibida, Posicion, PersonalidadJugador, CharlaJugador, AcademiaReporte, CopaCampeones, TablaCopa, PartidoCopa, GrupoCopa, AtributosJugador, PromesaGestion, EventoVestuario, OpcionEvento, JugadorAgente, ReunionPrivada, SorteoCopaActivo, FanTweet, Tutoria } from '../types';
+import { Equipo, Jugador, Liga, TablaEquipo, Jornada, Formacion, EstiloJuego, OpcionPrensa, RuedaPrensa, OfertaRecibida, Posicion, PersonalidadJugador, CharlaJugador, AcademiaReporte, CopaCampeones, TablaCopa, PartidoCopa, GrupoCopa, AtributosJugador, PromesaGestion, EventoVestuario, OpcionEvento, JugadorAgente, ReunionPrivada, SorteoCopaActivo, FanTweet, Tutoria, RecordsClub, HistoricoJugadorRecord, RegistroPartidoRecord } from '../types';
 import { equiposIniciales, jugadoresIniciales, ligaInicial, fixtureInicial, generarNewgen, generarFixtureRoundRobin, equiposLaLiga, equiposPremier, equiposSerieA, equiposBundesliga, randomRange } from '../data/initialData';
 import { simularPartido, obtenerCategoriaPosicion } from '../engine/matchEngine';
 
@@ -90,6 +90,9 @@ export interface GameContextProps {
   comprarJugadorAgente: (agenteId: string) => { aceptado: boolean; mensaje: string };
   iniciarProyectoConstruccion: (tipo: 'estadio' | 'clinica' | 'academia') => { aceptado: boolean; mensaje: string };
   iniciarTutoria: (veteranoId: string, juvenilId: string) => { aceptado: boolean; mensaje: string };
+  recordsClub: RecordsClub;
+  recordModalActivo: { mensaje: string } | null;
+  cerrarRecordModal: () => void;
 }
 
 export const GameContext = createContext<GameContextProps | undefined>(undefined);
@@ -197,6 +200,92 @@ const sonPersonalidadesChocantes = (p1: string, p2: string): boolean => {
     (p1 === 'Problemático' && ['Profesional', 'Líder', 'Leal', 'Ambicioso'].includes(p2)) ||
     (p2 === 'Problemático' && ['Profesional', 'Líder', 'Leal', 'Ambicioso'].includes(p1))
   );
+};
+
+export const generarRecordsClubIniciales = (club: Equipo): RecordsClub => {
+  const rep = club.reputacion;
+  let nombreGoleador = 'Leyenda del Club';
+  let nombreAsistente = 'Histórico del Club';
+  let nombrePartidos = 'Símbolo del Club';
+
+  const cid = club.id.toLowerCase();
+  if (cid.includes('barcelona') || cid.includes('fcb')) {
+    nombreGoleador = 'Lionel Messi';
+    nombreAsistente = 'Xavi Hernández';
+    nombrePartidos = 'Lionel Messi';
+  } else if (cid.includes('real-madrid') || cid.includes('madrid') || cid.includes('rma')) {
+    nombreGoleador = 'Cristiano Ronaldo';
+    nombreAsistente = 'Karim Benzema';
+    nombrePartidos = 'Raúl González';
+  } else if (cid.includes('atletico') || cid.includes('atm')) {
+    nombreGoleador = 'Luis Aragonés';
+    nombreAsistente = 'Koke Resurrección';
+    nombrePartidos = 'Koke Resurrección';
+  } else if (cid.includes('manchester-city') || cid.includes('city') || cid.includes('mci')) {
+    nombreGoleador = 'Sergio Agüero';
+    nombreAsistente = 'Kevin De Bruyne';
+    nombrePartidos = 'David Silva';
+  } else if (cid.includes('manchester-united') || cid.includes('united') || cid.includes('mun')) {
+    nombreGoleador = 'Wayne Rooney';
+    nombreAsistente = 'Ryan Giggs';
+    nombrePartidos = 'Ryan Giggs';
+  } else if (cid.includes('liverpool') || cid.includes('liv')) {
+    nombreGoleador = 'Ian Rush';
+    nombreAsistente = 'Steven Gerrard';
+    nombrePartidos = 'Ian Callaghan';
+  } else if (cid.includes('arsenal') || cid.includes('ars')) {
+    nombreGoleador = 'Thierry Henry';
+    nombreAsistente = 'Dennis Bergkamp';
+    nombrePartidos = 'David O\'Leary';
+  } else if (cid.includes('inter') || cid.includes('int')) {
+    nombreGoleador = 'Giuseppe Meazza';
+    nombreAsistente = 'Javier Zanetti';
+    nombrePartidos = 'Javier Zanetti';
+  } else if (cid.includes('milan') || cid.includes('mil')) {
+    nombreGoleador = 'Gunnar Nordahl';
+    nombreAsistente = 'Gianni Rivera';
+    nombrePartidos = 'Paolo Maldini';
+  } else if (cid.includes('juventus') || cid.includes('juv')) {
+    nombreGoleador = 'Alessandro Del Piero';
+    nombreAsistente = 'Alessandro Del Piero';
+    nombrePartidos = 'Alessandro Del Piero';
+  } else if (cid.includes('bayern') || cid.includes('fcb')) {
+    nombreGoleador = 'Gerd Müller';
+    nombreAsistente = 'Thomas Müller';
+    nombrePartidos = 'Sepp Maier';
+  }
+
+  return {
+    maxGoleador: {
+      jugadorId: 'leyenda-goleador',
+      jugadorNombre: nombreGoleador,
+      cantidad: Math.round(rep * 2.5 + 80)
+    },
+    maxAsistente: {
+      jugadorId: 'leyenda-asistente',
+      jugadorNombre: nombreAsistente,
+      cantidad: Math.round(rep * 1.5 + 40)
+    },
+    maxPartidos: {
+      jugadorId: 'leyenda-partidos',
+      jugadorNombre: nombrePartidos,
+      cantidad: Math.round(rep * 4.5 + 250)
+    },
+    mayorGoleada: {
+      rivalNombre: 'Rival de Liga',
+      rivalEscudo: '🛡️',
+      golesFavor: 5,
+      golesContra: 0,
+      fecha: '2023-11-12'
+    },
+    peorDerrota: {
+      rivalNombre: 'Rival de Liga',
+      rivalEscudo: '🛡️',
+      golesFavor: 0,
+      golesContra: 4,
+      fecha: '2022-04-09'
+    }
+  };
 };
 
 const procesarPasoDelDiaTutorias = (
@@ -1113,7 +1202,10 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       ...j,
       titular: false,
       mesesContrato: j.mesesContrato !== undefined ? j.mesesContrato : Math.floor(Math.random() * 25) + 6,
-      rasgos: j.rasgos || generarRasgosAleatorios(j.posicion)
+      rasgos: j.rasgos || generarRasgosAleatorios(j.posicion),
+      golesHistoricos: j.goles || 0,
+      asistenciasHistoricos: j.asistencias || 0,
+      partidosHistoricos: j.partidosJugados || 0
     }));
     const teamIds = Array.from(new Set(playersWithTitular.map(p => p.idEquipo)));
     teamIds.forEach(teamId => {
@@ -1128,6 +1220,16 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     });
     return playersWithTitular;
   });
+
+  const [recordsClub, setRecordsClub] = useState<RecordsClub>(() => ({
+    maxGoleador: { jugadorId: 'default-goleador', jugadorNombre: 'Ninguno', cantidad: 0 },
+    maxAsistente: { jugadorId: 'default-asistente', jugadorNombre: 'Ninguno', cantidad: 0 },
+    maxPartidos: { jugadorId: 'default-partidos', jugadorNombre: 'Ninguno', cantidad: 0 },
+    mayorGoleada: { rivalNombre: 'Ninguno', rivalEscudo: '', golesFavor: 0, golesContra: 0, fecha: '' },
+    peorDerrota: { rivalNombre: 'Ninguno', rivalEscudo: '', golesFavor: 0, golesContra: 0, fecha: '' }
+  }));
+  const [recordModalActivo, setRecordModalActivo] = useState<{ mensaje: string } | null>(null);
+  const cerrarRecordModal = useCallback(() => setRecordModalActivo(null), []);
   const [liga, setLiga] = useState<Liga>(ligaInicial);
   const [fechaActual, setFechaActual] = useState<string>('2026-07-01'); // Inicio de pretemporada
   const [equipoUsuarioId, setEquipoUsuarioId] = useState<string | null>(null);
@@ -1577,6 +1679,11 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
     setJuegoIniciado(true);
 
+    const selectedClub = equipos.find(e => e.id === equipoId);
+    if (selectedClub) {
+      setRecordsClub(generarRecordsClubIniciales(selectedClub));
+    }
+
     // Sincronizar liga y fixture según el país del equipo seleccionado
     let leagueId = 'la-liga';
     let leagueName = 'La Liga EA Sports';
@@ -1629,7 +1736,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       '2026-08-17'
     );
     setFixture(newFixture);
-  }, []);
+  }, [equipos]);
 
   // Limpiar el historial de noticias
   const limpiarNoticias = useCallback(() => {
@@ -2964,7 +3071,10 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       ...j,
       titular: false,
       mesesContrato: j.mesesContrato !== undefined ? j.mesesContrato : Math.floor(Math.random() * 25) + 6,
-      rasgos: j.rasgos || generarRasgosAleatorios(j.posicion)
+      rasgos: j.rasgos || generarRasgosAleatorios(j.posicion),
+      golesHistoricos: j.goles || 0,
+      asistenciasHistoricos: j.asistencias || 0,
+      partidosHistoricos: j.partidosJugados || 0
     }));
     const teamIds = Array.from(new Set(playersWithTitular.map(p => p.idEquipo)));
     teamIds.forEach(teamId => {
@@ -3635,7 +3745,123 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       );
     }
 
-    setJugadores(jugadoresProcesados);
+    // --- VERIFICAR Y ACTUALIZAR RÉCORDS HISTÓRICOS ---
+    const jugadoresProcesadosConHistorico = jugadoresProcesados.map(jNuevo => {
+      if (jNuevo.idEquipo !== equipoUsuarioId) return jNuevo;
+      const viejo = jugadores.find(j => j.id === jNuevo.id);
+      if (!viejo) return jNuevo;
+
+      const golesInc = (jNuevo.goles || 0) - (viejo.goles || 0);
+      const asistenciasInc = (jNuevo.asistencias || 0) - (viejo.asistencias || 0);
+      const partidosInc = (jNuevo.partidosJugados || 0) - (viejo.partidosJugados || 0);
+
+      const golesHist = (viejo.golesHistoricos || 0) + (golesInc > 0 ? golesInc : 0);
+      const asistenciasHist = (viejo.asistenciasHistoricos || 0) + (asistenciasInc > 0 ? asistenciasInc : 0);
+      const partidosHist = (viejo.partidosHistoricos || 0) + (partidosInc > 0 ? partidosInc : 0);
+
+      return {
+        ...jNuevo,
+        golesHistoricos: golesHist,
+        asistenciasHistoricos: asistenciasHist,
+        partidosHistoricos: partidosHist
+      };
+    });
+
+    let recordModificado = { ...recordsClub };
+    let notificacionRecord: { mensaje: string } | null = null;
+
+    // A. Comparación de récords de jugadores
+    jugadoresProcesadosConHistorico.forEach(j => {
+      if (j.idEquipo === equipoUsuarioId) {
+        // Goles
+        if ((j.golesHistoricos || 0) > recordModificado.maxGoleador.cantidad) {
+          const viejoRecord = recordModificado.maxGoleador.cantidad;
+          recordModificado.maxGoleador = {
+            jugadorId: j.id,
+            jugadorNombre: j.nombre,
+            cantidad: j.golesHistoricos || 0
+          };
+          if (recordModificado.maxGoleador.jugadorNombre !== j.nombre || viejoRecord > 0) {
+            notificacionRecord = {
+              mensaje: `¡HISTÓRICO! ${j.nombre} se convirtió hoy en el máximo goleador de la historia del club con ${j.golesHistoricos} goles, superando el récord anterior de ${viejoRecord} goles.`
+            };
+          }
+        }
+
+        // Asistencias
+        if ((j.asistenciasHistoricos || 0) > recordModificado.maxAsistente.cantidad) {
+          const viejoRecord = recordModificado.maxAsistente.cantidad;
+          recordModificado.maxAsistente = {
+            jugadorId: j.id,
+            jugadorNombre: j.nombre,
+            cantidad: j.asistenciasHistoricos || 0
+          };
+          if (recordModificado.maxAsistente.jugadorNombre !== j.nombre || viejoRecord > 0) {
+            notificacionRecord = {
+              mensaje: `¡HISTÓRICO! ${j.nombre} se convirtió hoy en el máximo asistente de la historia del club con ${j.asistenciasHistoricos} asistencias, superando el récord anterior de ${viejoRecord} asistencias.`
+            };
+          }
+        }
+
+        // Partidos
+        if ((j.partidosHistoricos || 0) > recordModificado.maxPartidos.cantidad) {
+          const viejoRecord = recordModificado.maxPartidos.cantidad;
+          recordModificado.maxPartidos = {
+            jugadorId: j.id,
+            jugadorNombre: j.nombre,
+            cantidad: j.partidosHistoricos || 0
+          };
+          if (recordModificado.maxPartidos.jugadorNombre !== j.nombre || viejoRecord > 0) {
+            notificacionRecord = {
+              mensaje: `¡HISTÓRICO! ${j.nombre} se convirtió hoy en el jugador con más partidos disputados en la historia del club con ${j.partidosHistoricos} partidos, superando el récord anterior de ${viejoRecord} partidos.`
+            };
+          }
+        }
+      }
+    });
+
+    // B. Comparación de goleadas/derrotas
+    const rivalNombre = esLocalUsuario ? visitante.nombre : local.nombre;
+    const rivalEscudo = esLocalUsuario ? visitante.escudo : local.escudo;
+
+    if (golesUsuario > golesRival) {
+      const diffActual = recordModificado.mayorGoleada.golesFavor - recordModificado.mayorGoleada.golesContra;
+      const diffNueva = golesUsuario - golesRival;
+      if (diffNueva > diffActual || (diffNueva === diffActual && golesUsuario > recordModificado.mayorGoleada.golesFavor)) {
+        recordModificado.mayorGoleada = {
+          rivalNombre,
+          rivalEscudo,
+          golesFavor: golesUsuario,
+          golesContra: golesRival,
+          fecha: fechaActual
+        };
+        notificacionRecord = {
+          mensaje: `¡HISTÓRICO! Logramos la mayor goleada de la historia del club: ${golesUsuario} - ${golesRival} contra ${rivalNombre} el ${fechaActual}.`
+        };
+      }
+    } else if (golesUsuario < golesRival) {
+      const diffActual = recordModificado.peorDerrota.golesContra - recordModificado.peorDerrota.golesFavor;
+      const diffNueva = golesRival - golesUsuario;
+      if (diffNueva > diffActual || (diffNueva === diffActual && golesRival > recordModificado.peorDerrota.golesContra)) {
+        recordModificado.peorDerrota = {
+          rivalNombre,
+          rivalEscudo,
+          golesFavor: golesUsuario,
+          golesContra: golesRival,
+          fecha: fechaActual
+        };
+        notificacionRecord = {
+          mensaje: `¡DESASTRE HISTÓRICO! Sufrimos la peor derrota de la historia del club: ${golesUsuario} - ${golesRival} contra ${rivalNombre} el ${fechaActual}.`
+        };
+      }
+    }
+
+    if (notificacionRecord) {
+      setRecordModalActivo(notificacionRecord);
+      setRecordsClub(recordModificado);
+    }
+
+    setJugadores(jugadoresProcesadosConHistorico);
     if (proximaCharla) {
       setCharlaActiva(proximaCharla);
     }
@@ -3734,6 +3960,11 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setCopaCampeones(finalCopa);
       } else {
         setCopaEuropa(finalCopa);
+      }
+
+      if (finalCopa.faseActual === 'finalizada' && finalCopa.campeon === equipoUsuarioId) {
+        const nombreCopa = subCopa === 'champions' ? 'Copa de Campeones' : 'Copa Continental';
+        setHistorialTitulos(prev => [...prev, `${nombreCopa} ${liga.temporada}`]);
       }
     }
 
@@ -3962,7 +4193,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     // 7. Limpiar partido en vivo
     setPartidoEnVivo(null);
-  }, [partidoEnVivo, equipoUsuarioId, derrotasConsecutivas, copaCampeones, copaEuropa, procesarTransicionCopa, generarFeedHinchada]);
+  }, [partidoEnVivo, equipoUsuarioId, derrotasConsecutivas, copaCampeones, copaEuropa, procesarTransicionCopa, generarFeedHinchada, recordsClub, liga]);
 
   // Resolver charla del vestuario
   const resolverCharla = useCallback((decision: 'prometer' | 'vender' | 'sancionar') => {
@@ -4294,6 +4525,10 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       });
     }
 
+    if (campeonClub?.id === equipoUsuarioId) {
+      setHistorialTitulos(prev => [...prev, `Superliga ${liga.temporada}`]);
+    }
+
     const { equiposActualizados: equiposFinTutorias, jugadoresActualizados: jugadoresFinTutorias, noticiasTutorias: noticiasFinTutorias } =
       procesarPasoDelDiaTutorias(equiposActualizados, jugadoresFinalesProcesados, equipoUsuarioId, 60);
 
@@ -4573,6 +4808,8 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const aceptarOfertaEmpleo = useCallback((nuevoEquipoId: string) => {
     const nuevoClub = equipos.find(e => e.id === nuevoEquipoId);
     if (!nuevoClub) return;
+
+    setRecordsClub(generarRecordsClubIniciales(nuevoClub));
 
     // Quitar la marca de vacante del nuevo club
     setEquipos(prev => prev.map(e => e.id === nuevoEquipoId ? { ...e, sinEntrenador: false } : e));
@@ -4886,7 +5123,10 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         ofrecerContratoLibre,
         feedHinchada,
         iniciarProyectoConstruccion,
-        iniciarTutoria
+        iniciarTutoria,
+        recordsClub,
+        recordModalActivo,
+        cerrarRecordModal
       }}
     >
       {children}

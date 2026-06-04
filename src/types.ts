@@ -117,6 +117,9 @@ export interface Jugador {
   partidosJugados: number;
   calificacionMedia: number; // Calificación promedio de rendimiento (ej. 7.15)
   rasgos?: string[];
+  golesHistoricos?: number;
+  asistenciasHistoricos?: number;
+  partidosHistoricos?: number;
 }
 
 export type EstiloJuego = 'Ofensivo' | 'Defensivo' | 'Equilibrado';
@@ -374,5 +377,27 @@ export interface FanTweet {
   retweets: number;
   hashtag: string;
   tiempo: string;
+}
+
+export interface HistoricoJugadorRecord {
+  jugadorId: string;
+  jugadorNombre: string;
+  cantidad: number;
+}
+
+export interface RegistroPartidoRecord {
+  rivalNombre: string;
+  rivalEscudo: string;
+  golesFavor: number;
+  golesContra: number;
+  fecha: string;
+}
+
+export interface RecordsClub {
+  maxGoleador: HistoricoJugadorRecord;
+  maxAsistente: HistoricoJugadorRecord;
+  maxPartidos: HistoricoJugadorRecord;
+  mayorGoleada: RegistroPartidoRecord;
+  peorDerrota: RegistroPartidoRecord;
 }
 

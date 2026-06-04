@@ -19,6 +19,7 @@ import { PerfilManagerView } from './views/PerfilManagerView';
 import { OficinaManagerView } from './views/OficinaManagerView';
 import { SorteoCopasView } from './views/SorteoCopasView';
 import { ClubView } from './views/ClubView';
+import { SalonDeLaFamaView } from './views/SalonDeLaFamaView';
 
 // ==========================================
 // FORMATEADORES AUXILIARES
@@ -87,7 +88,9 @@ const AppContent: React.FC = () => {
     juegoIniciado,
     aceptarOfertaEmpleo,
     reunionPrivadaActiva,
-    sorteoCopaActivo
+    sorteoCopaActivo,
+    recordModalActivo,
+    cerrarRecordModal
   } = useGame();
 
   // ==========================================
@@ -98,7 +101,7 @@ const AppContent: React.FC = () => {
   }
 
   // Estados de interfaz
-  const [vista, setVista] = useState<'dashboard' | 'plantel' | 'tabla' | 'mercado' | 'tactica' | 'analitica' | 'copa' | 'entrenamiento' | 'perfil' | 'club'>('dashboard');
+  const [vista, setVista] = useState<'dashboard' | 'plantel' | 'tabla' | 'mercado' | 'tactica' | 'analitica' | 'copa' | 'entrenamiento' | 'perfil' | 'club' | 'fama'>('dashboard');
   const [menuAbierto, setMenuAbierto] = useState<boolean>(false);
   const [nombreManagerInput, setNombreManagerInput] = useState<string>('DT Mánager');
   
@@ -754,6 +757,16 @@ const AppContent: React.FC = () => {
             >
               <span>👔</span> Perfil Mánager
             </button>
+            <button
+              onClick={() => handleNavigation('fama')}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-semibold transition-all duration-150 ${
+                vista === 'fama'
+                  ? 'bg-amber-600 text-white shadow-lg shadow-amber-700/20'
+                  : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/60'
+              }`}
+            >
+              <span>🏆</span> Salón de la Fama
+            </button>
           </nav>
         </div>
 
@@ -890,6 +903,11 @@ const AppContent: React.FC = () => {
           {vista === 'perfil' && (
             <PerfilManagerView />
           )}
+
+          {/* VISTA SALÓN DE LA FAMA */}
+          {vista === 'fama' && (
+            <SalonDeLaFamaView />
+          )}
  
         </div>
       </main>
@@ -965,6 +983,48 @@ const AppContent: React.FC = () => {
               </div>
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* ==========================================
+          MODAL GIGANTE DE RÉCORD HISTÓRICO
+          ========================================== */}
+      {recordModalActivo && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md overflow-y-auto animate-fade-in">
+          <style>{`
+            @keyframes pulseGlow {
+              0%, 100% { box-shadow: 0 0 15px rgba(245, 158, 11, 0.1); border-color: rgba(245, 158, 11, 0.3); }
+              50% { box-shadow: 0 0 30px rgba(245, 158, 11, 0.25); border-color: rgba(245, 158, 11, 0.6); }
+            }
+            .animate-pulse-glow {
+              animation: pulseGlow 2s infinite ease-in-out;
+            }
+            .border-glow {
+              animation: pulseGlow 3s infinite ease-in-out;
+            }
+          `}</style>
+          <div className="bg-gradient-to-b from-slate-950/95 to-slate-900 border-2 border-amber-400/50 rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl shadow-amber-500/10 flex flex-col items-center justify-center text-center p-8 border-glow">
+            
+            {/* Corona / Trofeo animado */}
+            <div className="w-24 h-24 rounded-full bg-amber-500/15 border border-amber-400/30 flex items-center justify-center text-5xl mb-6 shadow-inner animate-pulse-glow">
+              👑
+            </div>
+
+            <h2 className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-400 via-yellow-300 via-yellow-400 to-amber-500 tracking-tight mb-4 uppercase">
+              ¡RÉCORD HISTÓRICO!
+            </h2>
+            
+            <p className="text-sm text-slate-200 leading-relaxed max-w-md font-medium mb-8">
+              {recordModalActivo.mensaje}
+            </p>
+
+            <button
+              onClick={cerrarRecordModal}
+              className="bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-600 hover:to-yellow-600 text-slate-950 font-black uppercase tracking-wider text-xs px-8 py-3.5 rounded-xl shadow-lg shadow-amber-900/30 transition-all duration-200 transform hover:scale-105 active:scale-95 cursor-pointer"
+            >
+              🎉 ¡Celebrar Hazaña!
+            </button>
           </div>
         </div>
       )}
