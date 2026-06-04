@@ -2,16 +2,25 @@ import React, { useState } from 'react';
 import { useGame } from '../context/useGame';
 import { Jugador, AtributosJugador } from '../types';
 
+const formatearMoneda = (valor: number): string => {
+  if (valor >= 1000000) {
+    return `${(valor / 1000000).toFixed(1)} M€`;
+  }
+  return `${(valor / 1000).toFixed(0)} m€`;
+};
+
 export const EntrenamientoView: React.FC = () => {
   const { 
     equipoUsuario, 
     establecerEnfoqueEntrenamiento, 
     jugadores, 
     establecerEntrenamientoIndividual,
-    equipoUsuarioId 
+    equipoUsuarioId,
+    darCharlaMotivacional,
+    organizarActividadCohesion
   } = useGame();
 
-  const [tabActiva, setTabActiva] = useState<'general' | 'individual'>('general');
+  const [tabActiva, setTabActiva] = useState<'general' | 'individual' | 'vestuario'>('general');
 
   if (!equipoUsuario) return null;
 
@@ -99,6 +108,16 @@ export const EntrenamientoView: React.FC = () => {
           }`}
         >
           👤 Entrenamiento Individual (Jugadores)
+        </button>
+        <button
+          onClick={() => setTabActiva('vestuario')}
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-xs font-extrabold uppercase tracking-wider transition-all duration-150 ${
+            tabActiva === 'vestuario'
+              ? 'bg-slate-900 border border-slate-800 text-teal-400 font-black shadow-md'
+              : 'text-slate-500 hover:text-slate-300'
+          }`}
+        >
+          🤝 Química del Vestuario
         </button>
       </div>
 
@@ -286,7 +305,7 @@ export const EntrenamientoView: React.FC = () => {
 
           </div>
         </div>
-      ) : (
+      ) : tabActiva === 'individual' ? (
         /* Pestaña: Entrenamiento Individual */
         <div className="space-y-4">
           <div className="bg-slate-900/40 border border-slate-850 p-6 rounded-2xl shadow-lg backdrop-blur-md">
@@ -421,7 +440,212 @@ export const EntrenamientoView: React.FC = () => {
             </div>
           </div>
         </div>
-      )}
+      ) : tabActiva === 'vestuario' ? (
+        <div className="space-y-6">
+          {/* Panel de Química actual */}
+          <div className="bg-slate-900/40 border border-slate-800/80 p-6 rounded-2xl shadow-lg backdrop-blur-md flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+            <div className="space-y-2">
+              <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                🤝 Nivel de Cohesión del Vestuario
+              </h2>
+              <p className="text-xs text-slate-400 leading-relaxed max-w-xl">
+                La química de vestuario multiplica el desempeño ofensivo y defensivo de tu equipo en un rango de <strong className="text-teal-400">0.85x a 1.15x</strong>. Podés trabajar activamente en la química mediante charlas o eventos grupales para potenciar los resultados en cancha.
+              </p>
+            </div>
+            
+            {/* Medidor de química */}
+            {(() => {
+              const chem = equipoUsuario.quimicaVestuario !== undefined ? equipoUsuario.quimicaVestuario : 70;
+              let chemColor = 'text-rose-400';
+              let chemBg = 'bg-rose-500/10 border-rose-500/20';
+              let barColor = 'bg-rose-500';
+              if (chem >= 80) {
+                chemColor = 'text-emerald-400';
+                chemBg = 'bg-emerald-500/10 border-emerald-500/20';
+                barColor = 'bg-emerald-500';
+              } else if (chem >= 55) {
+                chemColor = 'text-amber-400';
+                chemBg = 'bg-amber-500/10 border-amber-500/20';
+                barColor = 'bg-amber-500';
+              }
+              return (
+                <div className={`p-5 rounded-2xl border ${chemBg} flex flex-col items-center justify-center min-w-[200px] text-center shadow-lg`}>
+                  <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Química Actual</span>
+                  <span className={`text-4xl font-black mt-1 ${chemColor}`}>{chem}%</span>
+                  <div className="h-2 w-32 bg-slate-950/60 rounded-full mt-3 overflow-hidden border border-slate-900">
+                    <div className={`h-full ${barColor}`} style={{ width: `${chem}%` }} />
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
+            {/* Panel de Explicación y Factores (col-span 2) */}
+            <div className="md:col-span-2 bg-slate-900/40 border border-slate-800/80 rounded-2xl p-6 shadow-lg backdrop-blur-md space-y-5">
+              <h3 className="text-sm font-extrabold text-white uppercase tracking-wider border-b border-slate-800 pb-2">
+                📈 Análisis del Vestuario
+              </h3>
+              
+              {/* Lista de Factores */}
+              <div className="space-y-4 text-xs">
+                {(() => {
+                  const moralPromedio = Math.round(jugadoresClub.reduce((acc, j) => acc + j.moral, 0) / (jugadoresClub.length || 1));
+                  const problematicos = jugadoresClub.filter(j => j.personalidad === 'Problemático').length;
+                  const lideresLeales = jugadoresClub.filter(j => j.personalidad === 'Líder' || j.personalidad === 'Leal').length;
+                  const capitan = jugadoresClub.find(j => j.esCapitan === true);
+
+                  return (
+                    <>
+                      {/* Factor 1: Moral Promedio */}
+                      <div className="flex justify-between items-center bg-slate-950/40 border border-slate-800/60 p-3.5 rounded-xl">
+                        <div className="space-y-1">
+                          <span className="font-bold text-slate-200 block">Moral Promedio del Plantel</span>
+                          <span className="text-[10px] text-slate-500">Un vestuario contento es más receptivo y unido.</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono font-bold text-slate-300">{moralPromedio}%</span>
+                          {moralPromedio >= 75 ? (
+                            <span className="text-xs text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded">Beneficio (+2/sem)</span>
+                          ) : moralPromedio < 55 ? (
+                            <span className="text-xs text-rose-400 font-bold bg-rose-500/10 px-2 py-0.5 rounded">Penalización (-2/sem)</span>
+                          ) : (
+                            <span className="text-xs text-slate-400 bg-slate-800 px-2 py-0.5 rounded">Estable</span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Factor 2: Personalidades Conflictivas */}
+                      <div className="flex justify-between items-center bg-slate-950/40 border border-slate-800/60 p-3.5 rounded-xl">
+                        <div className="space-y-1">
+                          <span className="font-bold text-slate-200 block">Jugadores Problemáticos</span>
+                          <span className="text-[10px] text-slate-500">Futbolistas insubordinados restan armonía al grupo.</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono font-bold text-slate-300">{problematicos}</span>
+                          {problematicos > 0 ? (
+                            <span className="text-xs text-rose-400 font-bold bg-rose-500/10 px-2 py-0.5 rounded">Penalización (-{problematicos}/sem)</span>
+                          ) : (
+                            <span className="text-xs text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded">Sin Tensión</span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Factor 3: Líderes y Leales */}
+                      <div className="flex justify-between items-center bg-slate-950/40 border border-slate-800/60 p-3.5 rounded-xl">
+                        <div className="space-y-1">
+                          <span className="font-bold text-slate-200 block">Líderes y Leales</span>
+                          <span className="text-[10px] text-slate-500">Aportan cohesión y ayudan a resolver conflictos.</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono font-bold text-slate-300">{lideresLeales}</span>
+                          {lideresLeales > 0 ? (
+                            <span className="text-xs text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded">Soporte (+{Math.min(3, lideresLeales * 0.5)}/sem)</span>
+                          ) : (
+                            <span className="text-xs text-slate-400 bg-slate-800 px-2 py-0.5 rounded">Ninguno</span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Factor 4: Capitán del Equipo */}
+                      <div className="flex justify-between items-center bg-slate-950/40 border border-slate-800/60 p-3.5 rounded-xl">
+                        <div className="space-y-1">
+                          <span className="font-bold text-slate-200 block">Capitán Designado</span>
+                          <span className="text-[10px] text-slate-500">Un referente oficial estabiliza la moral del grupo.</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {capitan ? (
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-slate-300 font-mono text-[11px]">👑 {capitan.nombre}</span>
+                              <span className="text-xs text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded">Activo</span>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-amber-400 font-bold bg-amber-500/10 px-2 py-0.5 rounded">Sin designar (Inestabilidad)</span>
+                          )}
+                        </div>
+                      </div>
+                    </>
+                  );
+                })()}
+              </div>
+            </div>
+
+            {/* Acciones de Entrenamiento / Vestuario */}
+            <div className="bg-slate-900/40 border border-slate-800/80 rounded-2xl p-6 shadow-lg backdrop-blur-md space-y-4">
+              <h3 className="text-sm font-extrabold text-white uppercase tracking-wider border-b border-slate-800 pb-2">
+                📢 Decisiones Directivas
+              </h3>
+              
+              {/* Tarjeta Charla Motivacional */}
+              <div className="bg-slate-950/60 border border-slate-800/50 rounded-xl p-4 space-y-3">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h4 className="text-xs font-black text-slate-200 uppercase tracking-wide">Charla Motivacional</h4>
+                    <p className="text-[10px] text-slate-400 mt-1">
+                      Charla colectiva para unir fuerzas y motivar.
+                    </p>
+                  </div>
+                  <span className="text-xl">🗣️</span>
+                </div>
+                <div className="text-[10px] text-slate-500 flex justify-between">
+                  <span>Costo: <strong className="text-slate-300">Gratis</strong></span>
+                  <span>Efecto: <strong className="text-teal-400">+3 Química / +5 Moral</strong></span>
+                </div>
+                <button
+                  onClick={() => {
+                    const res = darCharlaMotivacional();
+                    alert(res.mensaje);
+                  }}
+                  disabled={equipoUsuario.semanaCharlaRealizada}
+                  className={`w-full py-2 rounded-lg text-xs font-bold transition-all ${
+                    equipoUsuario.semanaCharlaRealizada
+                      ? 'bg-slate-850 text-slate-500 cursor-not-allowed border border-slate-800/80'
+                      : 'bg-teal-600 hover:bg-teal-500 text-white shadow-sm'
+                  }`}
+                >
+                  {equipoUsuario.semanaCharlaRealizada ? 'Hecho esta semana' : 'Dar Charla Motivacional'}
+                </button>
+              </div>
+
+              {/* Tarjeta Actividad Cohesión */}
+              <div className="bg-slate-950/60 border border-slate-800/50 rounded-xl p-4 space-y-3">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h4 className="text-xs font-black text-slate-200 uppercase tracking-wide">Actividad de Cohesión</h4>
+                    <p className="text-[10px] text-slate-400 mt-1">
+                      Cena de equipo o recreación recreativa.
+                    </p>
+                  </div>
+                  <span className="text-xl">🤝</span>
+                </div>
+                <div className="text-[10px] text-slate-500 flex justify-between">
+                  <span>Costo: <strong className="text-amber-500">€20.000</strong></span>
+                  <span>Efecto: <strong className="text-teal-400">+7 Química / +10 Moral</strong></span>
+                </div>
+                <button
+                  onClick={() => {
+                    const res = organizarActividadCohesion();
+                    alert(res.mensaje);
+                  }}
+                  disabled={equipoUsuario.semanaActividadRealizada || equipoUsuario.presupuestoFichajes < 20000}
+                  className={`w-full py-2 rounded-lg text-xs font-bold transition-all ${
+                    equipoUsuario.semanaActividadRealizada || equipoUsuario.presupuestoFichajes < 20000
+                      ? 'bg-slate-850 text-slate-500 cursor-not-allowed border border-slate-800/80'
+                      : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-sm'
+                  }`}
+                >
+                  {equipoUsuario.semanaActividadRealizada 
+                    ? 'Hecho esta semana' 
+                    : equipoUsuario.presupuestoFichajes < 20000 
+                      ? 'Presupuesto Insuficiente' 
+                      : 'Organizar Actividad'}
+                </button>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 };

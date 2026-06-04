@@ -6051,6 +6051,13 @@ export const ligaInicial: Liga = {
   tabla: tablaInicial
 };
 
+export const obtenerClimaAleatorio = (): 'Soleado' | 'Lluvia Torrencial' | 'Nieve' => {
+  const rand = Math.random();
+  if (rand < 0.60) return 'Soleado';
+  if (rand < 0.85) return 'Lluvia Torrencial';
+  return 'Nieve';
+};
+
 // ============================================================
 // 7. GENERADOR AUTOMÁTICO DE FIXTURES DE LIGA (ROUND-ROBIN)
 // ============================================================
@@ -6071,12 +6078,12 @@ export function generarFixtureRoundRobin(equiposList: string[], fechaInicio: str
 
   // Primera vuelta (ida)
   for (let round = 0; round < numEquipos - 1; round++) {
-    const partidos: { localId: string; visitanteId: string }[] = [];
+    const partidos: { localId: string; visitanteId: string; clima?: 'Soleado' | 'Lluvia Torrencial' | 'Nieve' }[] = [];
     for (let i = 0; i < numEquipos / 2; i++) {
       const local = list[i];
       const visitante = list[numEquipos - 1 - i];
       if (local !== '_bye_' && visitante !== '_bye_') {
-        partidos.push({ localId: local, visitanteId: visitante });
+        partidos.push({ localId: local, visitanteId: visitante, clima: obtenerClimaAleatorio() });
       }
     }
 
@@ -6098,7 +6105,8 @@ export function generarFixtureRoundRobin(equiposList: string[], fechaInicio: str
   for (let round = 0; round < primeraVueltaCount; round++) {
     const partidosInvertidos = jornadas[round].partidos.map(p => ({
       localId: p.visitanteId,
-      visitanteId: p.localId
+      visitanteId: p.localId,
+      clima: obtenerClimaAleatorio()
     }));
 
     jornadas.push({

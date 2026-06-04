@@ -48,21 +48,22 @@ const obtenerMejoresAtributos = (atributos: AtributosJugador, posicion: string):
   });
 
   // Omitimos reflejos para jugadores de campo para que no se sesgue el top técnico
-  const filtrados = posicion === 'POR' 
-    ? lista 
+  const filtrados = posicion === 'POR'
+    ? lista
     : lista.filter(a => a.nombre !== 'Reflejos');
 
   return filtrados.sort((a, b) => b.valor - a.valor).slice(0, 3);
 };
 
 export const PlantelView: React.FC = () => {
-  const { jugadores, equipoUsuarioId, equipoUsuario, renovarContrato, toggleIntransferible } = useGame();
+  const { jugadores, equipoUsuarioId, equipoUsuario, renovarContrato, toggleIntransferible, toggleTransferible, designarCapitan } = useGame();
   const [jugadorSeleccionado, setJugadorSeleccionado] = useState<Jugador | null>(null);
   const [jugadorARenovar, setJugadorARenovar] = useState<Jugador | null>(null);
+  const [clausulaRenovacion, setClausulaRenovacion] = useState<number>(0);
 
   // Filtrar jugadores del equipo del usuario
   const jugadoresFiltrados = jugadores.filter(j => j.idEquipo === equipoUsuarioId);
-  
+
   // Identificar el once inicial teórico (los 11 mejores por CA) para etiquetarlos
   const titularesIds = [...jugadoresFiltrados]
     .sort((a, b) => b.ca - a.ca)
@@ -92,7 +93,7 @@ export const PlantelView: React.FC = () => {
           <span className={colorTexto}>{valor}</span>
         </div>
         <div className="h-2 w-full bg-slate-800 rounded-full overflow-hidden border border-slate-700/30">
-          <div 
+          <div
             style={{ width: `${(valor / 20) * 100}%` }}
             className={`h-full rounded-full transition-all duration-500 ${colorBarra}`}
           />
@@ -103,7 +104,7 @@ export const PlantelView: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      
+
       {/* Cabecera de la vista */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-850 pb-4">
         <div>
@@ -121,7 +122,7 @@ export const PlantelView: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start">
-        
+
         {/* ==========================================
             TABLA PRINCIPAL DE JUGADORES
             ========================================== */}
@@ -151,22 +152,26 @@ export const PlantelView: React.FC = () => {
                     <tr
                       key={jugador.id}
                       onClick={() => setJugadorSeleccionado(jugador)}
-                      className={`hover:bg-slate-800/40 cursor-pointer transition-colors duration-150 group ${
-                        jugadorSeleccionado?.id === jugador.id ? 'bg-slate-800/60 font-semibold' : ''
-                      }`}
+                      className={`hover:bg-slate-800/40 cursor-pointer transition-colors duration-150 group ${jugadorSeleccionado?.id === jugador.id ? 'bg-slate-800/60 font-semibold' : ''
+                        }`}
                     >
                       {/* Nombre y Estado Once Inicial */}
                       <td className="px-4 py-3.5 flex items-center gap-2">
-                        <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded leading-none ${
-                          esTitular ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-slate-800 text-slate-500'
-                        }`}>
+                        <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded leading-none ${esTitular ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-slate-800 text-slate-500'
+                          }`}>
                           {esTitular ? 'ONCE' : 'RES'}
                         </span>
                         <div>
-                          <div className="text-slate-200 group-hover:text-teal-400 transition-colors font-semibold flex items-center gap-1.5">
+                          <div className="text-slate-200 group-hover:text-teal-400 transition-colors font-semibold flex items-center gap-1.5 flex-wrap">
                             {jugador.nombre}
+                            {jugador.esCapitan && (
+                              <span className="text-[8px] px-1 py-0.5 rounded bg-cyan-500/20 text-cyan-300 font-bold border border-cyan-500/30 tracking-wider uppercase flex items-center gap-0.5" title="Capitán de la plantilla">👑 Cap.</span>
+                            )}
                             {jugador.intransferible && (
-                              <span className="text-[8px] px-1 py-0.5 rounded bg-amber-500/25 text-amber-300 font-bold border border-amber-500/30 tracking-wider uppercase" title="Jugador marcado como intransferible">🛡️ Prot.</span>
+                              <span className="text-[8px] px-1 py-0.5 rounded bg-amber-500/25 text-amber-300 font-bold border border-amber-500/30 tracking-wider uppercase" title="Jugador marcado como intransferible (protegido)">🛡️ Prot.</span>
+                            )}
+                            {jugador.listaTransferibles && (
+                              <span className="text-[8px] px-1 py-0.5 rounded bg-rose-500/20 text-rose-350 font-bold border border-rose-500/30 tracking-wider uppercase flex items-center gap-0.5" title="En lista de transferibles">💸 Transf.</span>
                             )}
                             {jugador.promesaMinutosActive && (
                               <span className="text-[8px] px-1 py-0.5 rounded bg-amber-500/25 text-amber-300 font-bold border border-amber-500/30 tracking-wider uppercase" title="Promesa de minutos activa">Promesa</span>
@@ -175,18 +180,17 @@ export const PlantelView: React.FC = () => {
                           <div className="text-[10px] text-slate-500 flex items-center flex-wrap gap-x-1.5 gap-y-0.5">
                             <span>{jugador.nacionalidad}</span>
                             <span>•</span>
-                            <span className={`text-[9px] font-bold ${
-                              jugador.personalidad === 'Líder' ? 'text-cyan-400' :
-                              jugador.personalidad === 'Ambicioso' ? 'text-amber-400' :
-                              jugador.personalidad === 'Profesional' ? 'text-emerald-400' :
-                              jugador.personalidad === 'Problemático' ? 'text-rose-400' :
-                              'text-fuchsia-400'
-                            }`} title={`Personalidad: ${jugador.personalidad}`}>
+                            <span className={`text-[9px] font-bold ${jugador.personalidad === 'Líder' ? 'text-cyan-400' :
+                                jugador.personalidad === 'Ambicioso' ? 'text-amber-400' :
+                                  jugador.personalidad === 'Profesional' ? 'text-emerald-400' :
+                                    jugador.personalidad === 'Problemático' ? 'text-rose-400' :
+                                      'text-fuchsia-400'
+                              }`} title={`Personalidad: ${jugador.personalidad}`}>
                               {jugador.personalidad === 'Líder' ? '⭐ Líder' :
-                               jugador.personalidad === 'Ambicioso' ? '⚡ Ambicioso' :
-                               jugador.personalidad === 'Profesional' ? '💼 Profesional' :
-                               jugador.personalidad === 'Problemático' ? '⚠️ Problemático' :
-                               '🛡️ Leal'}
+                                jugador.personalidad === 'Ambicioso' ? '⚡ Ambicioso' :
+                                  jugador.personalidad === 'Profesional' ? '💼 Profesional' :
+                                    jugador.personalidad === 'Problemático' ? '⚠️ Problemático' :
+                                      '🛡️ Leal'}
                             </span>
                           </div>
                         </div>
@@ -194,12 +198,11 @@ export const PlantelView: React.FC = () => {
 
                       {/* Posición con badges customizados */}
                       <td className="px-3 py-3.5">
-                        <span className={`text-[9px] font-extrabold px-2 py-0.5 rounded tracking-wide ${
-                          jugador.posicion === 'POR' ? 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20' :
-                          jugador.posicion === 'DFC' || jugador.posicion === 'LI' || jugador.posicion === 'LD' ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' :
-                          jugador.posicion === 'MC' || jugador.posicion === 'MCO' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
-                          'bg-rose-500/10 text-rose-400 border border-rose-500/20'
-                        }`}>
+                        <span className={`text-[9px] font-extrabold px-2 py-0.5 rounded tracking-wide ${jugador.posicion === 'POR' ? 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20' :
+                            jugador.posicion === 'DFC' || jugador.posicion === 'LI' || jugador.posicion === 'LD' ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' :
+                              jugador.posicion === 'MC' || jugador.posicion === 'MCO' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
+                                'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                          }`}>
                           {jugador.posicion}
                         </span>
                       </td>
@@ -211,18 +214,17 @@ export const PlantelView: React.FC = () => {
 
                       {/* Forma Física */}
                       <td className="px-3 py-3.5 text-center font-mono">
-                        <span className={`font-bold ${
-                          jugador.formaFisica >= 90 ? 'text-emerald-400' :
-                          jugador.formaFisica >= 70 ? 'text-amber-500' :
-                          'text-rose-500'
-                        }`}>
+                        <span className={`font-bold ${jugador.formaFisica >= 90 ? 'text-emerald-400' :
+                            jugador.formaFisica >= 70 ? 'text-amber-500' :
+                              'text-rose-500'
+                          }`}>
                           {jugador.formaFisica}%
                         </span>
                       </td>
 
                       {/* Moral */}
                       <td className="px-3 py-3.5 text-center">
-                        <span 
+                        <span
                           title={`Moral: ${moralDet.texto} (${jugador.moral}%)`}
                           className={`inline-flex items-center gap-1 font-semibold ${moralDet.color}`}
                         >
@@ -240,8 +242,8 @@ export const PlantelView: React.FC = () => {
                           </span>
                           {/* Badges de Atributos */}
                           {mejoresAtributos.map((attr) => (
-                            <span 
-                              key={attr.nombre} 
+                            <span
+                              key={attr.nombre}
                               className="text-[9px] px-1.5 py-0.5 rounded bg-slate-800/80 text-slate-300 border border-slate-700/30"
                               title={`${attr.nombre}: ${attr.valor}`}
                             >
@@ -256,8 +258,8 @@ export const PlantelView: React.FC = () => {
                         {jugador.mesesContrato !== undefined ? (
                           <span className={
                             jugador.mesesContrato <= 6 ? 'text-rose-400 animate-pulse font-bold' :
-                            jugador.mesesContrato <= 12 ? 'text-amber-400' :
-                            'text-slate-400'
+                              jugador.mesesContrato <= 12 ? 'text-amber-400' :
+                                'text-slate-400'
                           }>
                             {jugador.mesesContrato} meses
                           </span>
@@ -269,15 +271,17 @@ export const PlantelView: React.FC = () => {
                         {formatearMoneda(jugador.valorMercado)}
                       </td>
 
-                      {/* Acciones: Renovar + Toggle Intransferible */}
+                      {/* Acciones: Renovar + Toggles */}
                       <td className="px-4 py-3.5 text-center">
                         <div className="flex items-center justify-center gap-1.5">
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
                               setJugadorARenovar(jugador);
+                              setClausulaRenovacion(Math.round((jugador.valorMercado * 1.5) / 1000) * 1000);
                             }}
-                            className="px-2 py-1 bg-teal-600/20 hover:bg-teal-600 text-teal-400 hover:text-white border border-teal-500/30 rounded text-[10px] uppercase font-bold tracking-wider transition-all"
+                            className="px-1.5 py-1 bg-teal-600/20 hover:bg-teal-600 text-teal-400 hover:text-white border border-teal-500/30 rounded text-[9px] uppercase font-bold tracking-wider transition-all"
+                            title="Renovar contrato"
                           >
                             Renovar
                           </button>
@@ -286,14 +290,40 @@ export const PlantelView: React.FC = () => {
                               e.stopPropagation();
                               toggleIntransferible(jugador.id);
                             }}
-                            title={jugador.intransferible ? 'Quitar protección: el jugador podrá ser vendido' : 'Marcar como intransferible: el jugador no podrá ser vendido'}
-                            className={`px-2 py-1 rounded text-[10px] font-bold tracking-wider border transition-all ${
-                              jugador.intransferible
+                            title={jugador.intransferible ? 'Quitar protección: el jugador podrá ser vendido' : 'Marcar como intransferible (Proteger de ofertas)'}
+                            className={`px-1.5 py-1 rounded text-[9px] font-bold tracking-wider border transition-all ${jugador.intransferible
                                 ? 'bg-amber-500/20 text-amber-300 border-amber-500/30 hover:bg-amber-500 hover:text-black'
                                 : 'bg-slate-800 text-slate-500 border-slate-700 hover:bg-slate-700 hover:text-slate-300'
-                            }`}
+                              }`}
                           >
-                            {jugador.intransferible ? '🛡️ Prot.' : '🔓'}
+                            {jugador.intransferible ? '🛡' : '🔓'}
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleTransferible(jugador.id);
+                            }}
+                            title={jugador.listaTransferibles ? 'Quitar de la lista de transferibles' : 'Poner en lista de transferibles (Atraer ofertas)'}
+                            className={`px-1.5 py-1 rounded text-[9px] font-bold tracking-wider border transition-all ${jugador.listaTransferibles
+                                ? 'bg-rose-500/20 text-rose-350 border-rose-500/30 hover:bg-rose-500 hover:text-white'
+                                : 'bg-slate-800 text-slate-500 border-slate-700 hover:bg-slate-700 hover:text-slate-300'
+                              }`}
+                          >
+                            💸
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              designarCapitan(jugador.id);
+                            }}
+                            disabled={jugador.esCapitan}
+                            title={jugador.esCapitan ? 'Este jugador es el capitán actual' : 'Designar como capitán del equipo'}
+                            className={`px-1.5 py-1 rounded text-[9px] font-bold tracking-wider border transition-all ${jugador.esCapitan
+                                ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30 cursor-default'
+                                : 'bg-slate-800 text-slate-500 border-slate-700 hover:bg-slate-700 hover:text-slate-300'
+                              }`}
+                          >
+                            👑
                           </button>
                         </div>
                       </td>
@@ -311,9 +341,9 @@ export const PlantelView: React.FC = () => {
         <div className="xl:col-span-1">
           {jugadorSeleccionado ? (
             <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl relative">
-              
+
               {/* Botón para cerrar perfil móvil */}
-              <button 
+              <button
                 onClick={() => setJugadorSeleccionado(null)}
                 className="absolute top-4 right-4 text-slate-500 hover:text-white transition-colors p-1"
                 aria-label="Cerrar detalles"
@@ -324,15 +354,14 @@ export const PlantelView: React.FC = () => {
               {/* Cabecera / Identidad */}
               <div className="p-5 bg-slate-950 border-b border-slate-800">
                 <div>
-                  <span className={`text-[9px] font-extrabold px-2 py-0.5 rounded tracking-wider leading-none ${
-                    jugadorSeleccionado.posicion === 'POR' ? 'bg-yellow-500/10 text-yellow-400' :
-                    jugadorSeleccionado.posicion === 'DFC' || jugadorSeleccionado.posicion === 'LI' || jugadorSeleccionado.posicion === 'LD' ? 'bg-blue-500/10 text-blue-400' :
-                    jugadorSeleccionado.posicion === 'MC' || jugadorSeleccionado.posicion === 'MCO' ? 'bg-emerald-500/10 text-emerald-400' :
-                    'bg-rose-500/10 text-rose-400'
-                  }`}>
+                  <span className={`text-[9px] font-extrabold px-2 py-0.5 rounded tracking-wider leading-none ${jugadorSeleccionado.posicion === 'POR' ? 'bg-yellow-500/10 text-yellow-400' :
+                      jugadorSeleccionado.posicion === 'DFC' || jugadorSeleccionado.posicion === 'LI' || jugadorSeleccionado.posicion === 'LD' ? 'bg-blue-500/10 text-blue-400' :
+                        jugadorSeleccionado.posicion === 'MC' || jugadorSeleccionado.posicion === 'MCO' ? 'bg-emerald-500/10 text-emerald-400' :
+                          'bg-rose-500/10 text-rose-400'
+                    }`}>
                     {jugadorSeleccionado.posicion}
                   </span>
-                  
+
                   <h3 className="text-xl font-extrabold text-white mt-2 tracking-tight leading-tight">
                     {jugadorSeleccionado.nombre}
                   </h3>
@@ -357,18 +386,17 @@ export const PlantelView: React.FC = () => {
                 <div className="mt-4 p-3 bg-slate-900/60 border border-slate-800/80 rounded-xl flex items-center justify-between text-xs">
                   <div>
                     <span className="text-[9px] uppercase font-bold text-slate-500 tracking-wider block">Personalidad del Vestuario</span>
-                    <span className={`text-xs font-black block mt-0.5 ${
-                      jugadorSeleccionado.personalidad === 'Líder' ? 'text-cyan-400' :
-                      jugadorSeleccionado.personalidad === 'Ambicioso' ? 'text-amber-400' :
-                      jugadorSeleccionado.personalidad === 'Profesional' ? 'text-emerald-400' :
-                      jugadorSeleccionado.personalidad === 'Problemático' ? 'text-rose-400' :
-                      'text-fuchsia-400'
-                    }`}>
+                    <span className={`text-xs font-black block mt-0.5 ${jugadorSeleccionado.personalidad === 'Líder' ? 'text-cyan-400' :
+                        jugadorSeleccionado.personalidad === 'Ambicioso' ? 'text-amber-400' :
+                          jugadorSeleccionado.personalidad === 'Profesional' ? 'text-emerald-400' :
+                            jugadorSeleccionado.personalidad === 'Problemático' ? 'text-rose-400' :
+                              'text-fuchsia-400'
+                      }`}>
                       {jugadorSeleccionado.personalidad === 'Líder' ? '⭐ Líder' :
-                       jugadorSeleccionado.personalidad === 'Ambicioso' ? '⚡ Ambicioso' :
-                       jugadorSeleccionado.personalidad === 'Profesional' ? '💼 Profesional' :
-                       jugadorSeleccionado.personalidad === 'Problemático' ? '⚠️ Problemático' :
-                       '🛡️ Leal'}
+                        jugadorSeleccionado.personalidad === 'Ambicioso' ? '⚡ Ambicioso' :
+                          jugadorSeleccionado.personalidad === 'Profesional' ? '💼 Profesional' :
+                            jugadorSeleccionado.personalidad === 'Problemático' ? '⚠️ Problemático' :
+                              '🛡️ Leal'}
                     </span>
                   </div>
                   {(jugadorSeleccionado.partidosSeguidosBanco || 0) > 0 && (
@@ -382,7 +410,7 @@ export const PlantelView: React.FC = () => {
 
               {/* Atributos Agrupados (Físicos, Técnicos, Mentales) */}
               <div className="p-5 space-y-6 max-h-[500px] overflow-y-auto custom-scrollbar">
-                
+
                 {/* CATEGORÍA 1: FÍSICOS */}
                 <div className="space-y-3">
                   <h4 className="text-[9px] font-extrabold text-slate-500 uppercase tracking-widest border-b border-slate-850 pb-1 flex items-center gap-1.5">
@@ -407,7 +435,7 @@ export const PlantelView: React.FC = () => {
                     {renderFilaAtributo('Regate / Dribbling', jugadorSeleccionado.atributos.regate)}
                     {renderFilaAtributo('Defensa / Marcaje', jugadorSeleccionado.atributos.defensa)}
                     {renderFilaAtributo('Técnica / Control', jugadorSeleccionado.atributos.tecnica)}
-                    {jugadorSeleccionado.posicion === 'POR' && 
+                    {jugadorSeleccionado.posicion === 'POR' &&
                       renderFilaAtributo('Reflejos (Arquero)', jugadorSeleccionado.atributos.reflejos)
                     }
                   </div>
@@ -431,23 +459,34 @@ export const PlantelView: React.FC = () => {
               {/* Pie de Ficha Finanzas */}
               <div className="p-4 bg-slate-950 border-t border-slate-800 flex justify-between items-center text-xs">
                 <div>
-                  <div className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Salario Semanal</div>
+                  <div className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Valor de Mercado</div>
+                  <div className="text-teal-400 font-extrabold font-mono mt-0.5">
+                    {formatearMoneda(jugadorSeleccionado.valorMercado)}
+                  </div>
+                </div>
+                <div className="text-center">
+                  <div className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Salario</div>
                   <div className="text-slate-300 font-bold font-mono mt-0.5">
                     {formatearMoneda(jugadorSeleccionado.salarioSemanal)}
                   </div>
                 </div>
                 <div className="text-center">
+                  <div className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Cláusula</div>
+                  <div className="text-amber-500 font-bold font-mono mt-0.5">
+                    {jugadorSeleccionado.clausulaRescision ? formatearMoneda(jugadorSeleccionado.clausulaRescision) : 'Sin cláusula'}
+                  </div>
+                </div>
+                <div className="text-center">
                   <div className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Contrato</div>
-                  <div className={`font-bold font-mono mt-0.5 ${
-                    jugadorSeleccionado.mesesContrato !== undefined && jugadorSeleccionado.mesesContrato <= 6 ? 'text-rose-400 animate-pulse' : 'text-slate-300'
-                  }`}>
+                  <div className={`font-bold font-mono mt-0.5 ${jugadorSeleccionado.mesesContrato !== undefined && jugadorSeleccionado.mesesContrato <= 6 ? 'text-rose-400 animate-pulse' : 'text-slate-300'
+                    }`}>
                     {jugadorSeleccionado.mesesContrato !== undefined ? `${jugadorSeleccionado.mesesContrato} meses` : '---'}
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Estado de Salud</div>
-                  <div className="text-emerald-400 font-bold mt-0.5">
-                    {jugadorSeleccionado.lesionado ? '⚠️ Lesionado' : '🟢 Disponible'}
+                  <div className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Salud</div>
+                  <div className={`font-bold mt-0.5 ${jugadorSeleccionado.lesionado ? 'text-rose-400 animate-pulse' : 'text-emerald-400'}`}>
+                    {jugadorSeleccionado.lesionado ? '⚠️ Lesionado' : '🟢 OK'}
                   </div>
                 </div>
               </div>
@@ -462,11 +501,10 @@ export const PlantelView: React.FC = () => {
                     {jugadorSeleccionado.promesas.map((promesa, idx) => (
                       <div key={idx} className="flex justify-between items-center bg-slate-900/40 p-2.5 rounded-xl border border-slate-850 text-[11px] gap-4">
                         <span className="text-slate-300 font-semibold">{promesa.descripcion}</span>
-                        <span className={`text-[9px] font-bold px-2.5 py-0.5 rounded-full select-none ${
-                          promesa.estado === 'Cumplida' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
-                          promesa.estado === 'Incumplida' ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20 animate-pulse' :
-                          'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                        }`}>
+                        <span className={`text-[9px] font-bold px-2.5 py-0.5 rounded-full select-none ${promesa.estado === 'Cumplida' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
+                            promesa.estado === 'Incumplida' ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20 animate-pulse' :
+                              'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                          }`}>
                           {promesa.estado}
                         </span>
                       </div>
@@ -478,7 +516,10 @@ export const PlantelView: React.FC = () => {
               {/* Botón de Acción Prominente */}
               <div className="p-4 bg-slate-900 border-t border-slate-800/80">
                 <button
-                  onClick={() => setJugadorARenovar(jugadorSeleccionado)}
+                  onClick={() => {
+                    setJugadorARenovar(jugadorSeleccionado);
+                    setClausulaRenovacion(Math.round((jugadorSeleccionado.valorMercado * 1.5) / 1000) * 1000);
+                  }}
                   className="w-full py-2.5 bg-gradient-to-r from-teal-500 to-emerald-600 hover:from-teal-400 hover:to-emerald-500 text-white font-bold rounded-lg text-xs uppercase tracking-wider shadow-md hover:shadow-lg transition-all text-center"
                 >
                   ✍️ Renovar Contrato
@@ -505,15 +546,20 @@ export const PlantelView: React.FC = () => {
           jugadorARenovar.salarioSemanal * 1.15,
           Math.round((jugadorARenovar.ca ** 2) * 35)
         );
-        
+
         const handleAceptarRenovacion = () => {
-          renovarContrato(jugadorARenovar.id, salarioExigido);
+          if (!clausulaRenovacion || clausulaRenovacion <= 0) {
+            alert('Por favor, ingresa una cláusula de rescisión válida y obligatoria.');
+            return;
+          }
+          renovarContrato(jugadorARenovar.id, salarioExigido, clausulaRenovacion);
           setJugadorARenovar(null);
           // Actualizar jugador seleccionado si es el que se renovó
           if (jugadorSeleccionado?.id === jugadorARenovar.id) {
             setJugadorSeleccionado(prev => prev ? {
               ...prev,
               salarioSemanal: salarioExigido,
+              clausulaRescision: clausulaRenovacion,
               mesesContrato: 36,
               moral: 100
             } : null);
@@ -523,7 +569,7 @@ export const PlantelView: React.FC = () => {
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm overflow-y-auto text-left">
             <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col animate-fade-in my-8">
-              
+
               {/* Header */}
               <div className="p-6 bg-slate-950 border-b border-slate-800 text-center relative border-t-4 border-t-teal-500">
                 <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Negociación de Contrato</span>
@@ -533,7 +579,7 @@ export const PlantelView: React.FC = () => {
 
               {/* Contenido / Oferta */}
               <div className="p-6 space-y-4 flex-1 bg-slate-950/20 text-xs">
-                
+
                 {/* Explicación de demanda */}
                 <div className="p-3 bg-slate-900 border border-slate-800 rounded-xl space-y-2">
                   <p className="text-slate-300 leading-relaxed font-medium">
@@ -551,6 +597,25 @@ export const PlantelView: React.FC = () => {
                     <span className="text-[9px] uppercase font-bold text-teal-400 tracking-wider block">Salario Exigido</span>
                     <span className="text-base font-extrabold text-teal-400 font-mono block mt-1">{formatearMoneda(salarioExigido)}/sem</span>
                   </div>
+                </div>
+
+                {/* Campo de Cláusula de Rescisión */}
+                <div className="bg-slate-900 border border-slate-850 rounded-xl p-4 space-y-2">
+                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider">
+                    Cláusula de Rescisión (€) <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    min="1000"
+                    step="50000"
+                    value={clausulaRenovacion || ''}
+                    onChange={(e) => setClausulaRenovacion(parseInt(e.target.value) || 0)}
+                    placeholder="Ej. 10.000.000"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white font-mono focus:outline-none focus:border-teal-500 transition-colors"
+                  />
+                  <p className="text-[10px] text-slate-500">
+                    Establece un precio de rescisión. Si un club rival lo paga, el jugador podrá marcharse directamente sin que puedas evitarlo.
+                  </p>
                 </div>
 
                 {/* Detalles de la Oferta */}
@@ -577,13 +642,17 @@ export const PlantelView: React.FC = () => {
               <div className="p-5 bg-slate-950 border-t border-slate-800 flex items-center justify-between gap-4">
                 <button
                   onClick={() => setJugadorARenovar(null)}
-                  className="px-4 py-2 bg-slate-900 border border-slate-800 text-slate-455 hover:text-white rounded-lg font-bold tracking-wide transition-all uppercase text-[10px]"
+                  className="px-4 py-2 bg-slate-900 border border-slate-800 text-slate-400 hover:text-white rounded-lg font-bold tracking-wide transition-all uppercase text-[10px]"
                 >
                   Rechazar / Cancelar
                 </button>
                 <button
+                  disabled={!clausulaRenovacion || clausulaRenovacion <= 0}
                   onClick={handleAceptarRenovacion}
-                  className="px-6 py-2.5 bg-gradient-to-r from-teal-500 to-emerald-600 hover:from-teal-400 hover:to-emerald-500 text-white font-extrabold rounded-lg shadow-md transition-all active:scale-95 uppercase text-[10px] tracking-wider"
+                  className={`px-6 py-2.5 font-extrabold rounded-lg shadow-md transition-all uppercase text-[10px] tracking-wider ${!clausulaRenovacion || clausulaRenovacion <= 0
+                      ? 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700/50'
+                      : 'bg-gradient-to-r from-teal-500 to-emerald-600 hover:from-teal-400 hover:to-emerald-500 text-white active:scale-95'
+                    }`}
                 >
                   Aceptar Términos
                 </button>

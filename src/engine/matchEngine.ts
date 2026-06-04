@@ -124,29 +124,29 @@ export function aplicarRolYEntrenamiento(
 
 export function calcularCompatibilidadPosicion(natural: Posicion, asignada: Posicion): number {
   if (natural === asignada) return 1.0;
-  
+
   const catNatural = obtenerCategoriaPosicion(natural);
   const catAsignada = obtenerCategoriaPosicion(asignada);
-  
+
   if (catNatural === 'POR' || catAsignada === 'POR') {
     return 0.15; // Jugar de portero sin serlo, o viceversa, es fatal
   }
-  
+
   if (catNatural === catAsignada) {
     return 0.85; // Misma línea táctica (ej. DFC de lateral)
   }
-  
+
   // Categorías adyacentes: DEF <-> MED or MED <-> DEL
-  const esAdyacente = 
+  const esAdyacente =
     (catNatural === 'DEF' && catAsignada === 'MED') ||
     (catNatural === 'MED' && catAsignada === 'DEF') ||
     (catNatural === 'MED' && catAsignada === 'DEL') ||
     (catNatural === 'DEL' && catAsignada === 'MED');
-    
+
   if (esAdyacente) {
     return 0.65; // Desplazamiento moderado
   }
-  
+
   return 0.40; // Desplazamiento extremo (ej. DEF en la delantera)
 }
 
@@ -155,7 +155,7 @@ export function asignarRolesTacticos(
   formacion: Formacion
 ): { jugador: Jugador; posicionAsignada: Posicion; compatibilidad: number }[] {
   const activeSlots = FORMACION_MAPA_SLOTS[formacion] || FORMACION_MAPA_SLOTS['4-3-3'];
-  
+
   // Mapear slots disponibles a un array modificable
   const slotsDisponibles = Object.entries(activeSlots).map(([slotKey, label]) => ({
     slotKey,
@@ -163,10 +163,10 @@ export function asignarRolesTacticos(
     linea: slotKey.split('-')[0],
     jugadorId: null as string | null
   }));
-  
+
   const asignaciones: { jugador: Jugador; posicionAsignada: Posicion; compatibilidad: number }[] = [];
   const jugadoresSinPosicion: Jugador[] = [];
-  
+
   // 1. Asignar primero los jugadores que ya tienen una posicionTactica válida
   jugadoresTitulares.forEach(j => {
     if (j.posicionTactica) {
@@ -184,16 +184,16 @@ export function asignarRolesTacticos(
     }
     jugadoresSinPosicion.push(j);
   });
-  
+
   // 2. Para los jugadores restantes, los asignamos con el algoritmo codicioso
   slotsDisponibles.forEach(slot => {
     if (slot.jugadorId) return; // ya ocupado
-    
+
     if (jugadoresSinPosicion.length === 0) return;
-    
+
     // Buscar la mejor coincidencia exacta por label
     let bestIdx = jugadoresSinPosicion.findIndex(p => p.posicion === slot.label);
-    
+
     // Si no hay, buscar coincidencia por categoría de línea táctica (DEF, MED, DEL)
     if (bestIdx === -1) {
       bestIdx = jugadoresSinPosicion.findIndex(p => {
@@ -201,16 +201,16 @@ export function asignarRolesTacticos(
         return catP === slot.linea;
       });
     }
-    
+
     // Si no hay, tomar el primero disponible
     if (bestIdx === -1) {
       bestIdx = 0;
     }
-    
+
     const player = jugadoresSinPosicion[bestIdx];
     slot.jugadorId = player.id;
     jugadoresSinPosicion.splice(bestIdx, 1);
-    
+
     const comp = calcularCompatibilidadPosicion(player.posicion, slot.label);
     asignaciones.push({
       jugador: player,
@@ -218,12 +218,18 @@ export function asignarRolesTacticos(
       compatibilidad: comp
     });
   });
-  
+
   return asignaciones;
 }
 
-export function simularPartido(local: Equipo, visitante: Equipo, jugadores: Jugador[]): ResultadoPartido {
+export function simularPartido(
+  local: Equipo,
+  visitante: Equipo,
+  jugadores: Jugador[],
+  climaParam?: 'Soleado' | 'Lluvia Torrencial' | 'Nieve'
+): ResultadoPartido {
   const eventos: string[] = [];
+  const clima = climaParam || 'Soleado';
 
   // 1. FILTRAR Y OBTENER LOS JUGADORES TITULARES (Alineación inicial)
   const plantelLocal = jugadores.filter(j => j.idEquipo === local.id);
@@ -238,13 +244,13 @@ export function simularPartido(local: Equipo, visitante: Equipo, jugadores: Juga
     const contratoCercano = j.mesesContrato !== undefined && j.mesesContrato <= 6;
     const moralBaja = j.moral < 55; // Mayor rango de sensibilidad para huelgas
     const sinContrato = j.mesesContrato !== undefined && j.mesesContrato <= 0;
-    
+
     if (sinContrato) {
       j.titular = false;
       eventos.push(`🚨 [Sin Contrato] ${j.nombre} (${local.nombreCorto}) se niega rotundamente a jugar hoy porque su contrato ha vencido.`);
       return false;
     }
-    
+
     if (contratoCercano && moralBaja && Math.random() < 0.70) {
       j.titular = false; // Desmarcar como titular
       eventos.push(`⚠️ [Conflicto Contractual] ${j.nombre} (${local.nombreCorto}) se niega a jugar hoy debido a su situación de contrato y baja moral.`);
@@ -257,7 +263,7 @@ export function simularPartido(local: Equipo, visitante: Equipo, jugadores: Juga
     const contratoCercano = j.mesesContrato !== undefined && j.mesesContrato <= 6;
     const moralBaja = j.moral < 55;
     const sinContrato = j.mesesContrato !== undefined && j.mesesContrato <= 0;
-    
+
     if (sinContrato) {
       j.titular = false;
       eventos.push(`🚨 [Sin Contrato] ${j.nombre} (${visitante.nombreCorto}) se niega rotundamente a jugar hoy porque su contrato ha vencido.`);
@@ -296,7 +302,29 @@ export function simularPartido(local: Equipo, visitante: Equipo, jugadores: Juga
     for (const key of Object.keys(atributosAjustados) as (keyof AtributosJugador)[]) {
       atributosAjustados[key] = Math.max(1, Math.round(atributosAjustados[key] * comp));
     }
-    return { ...j, atributos: atributosAjustados };
+
+    // --- LOCALÍA ---
+    // El equipo local recibe un bonus del +10% en sus atributos mentales (Moral y Determinación) debido al apoyo de la hinchada.
+    atributosAjustados.determinacion = Math.min(20, Math.round(atributosAjustados.determinacion * 1.10));
+    const moralConBonus = Math.min(100, Math.round(j.moral * 1.10));
+
+    // --- LLUVIA TORRENCIAL ---
+    // Baja un 20% la precisión del atributo Pase de todos los jugadores.
+    if (clima === 'Lluvia Torrencial') {
+      atributosAjustados.pase = Math.max(1, Math.round(atributosAjustados.pase * 0.80));
+    }
+
+    // --- NIEVE ---
+    // Reduce la Velocidad general de los extremos y delanteros un 15%, y aumenta la fuerza general de todos un 10%.
+    if (clima === 'Nieve') {
+      if (['ED', 'EI', 'DC'].includes(j.posicion)) {
+        atributosAjustados.velocidad = Math.max(1, Math.round(atributosAjustados.velocidad * 0.85));
+        atributosAjustados.aceleracion = Math.max(1, Math.round(atributosAjustados.aceleracion * 0.85));
+      }
+      atributosAjustados.fuerza = Math.min(20, Math.round(atributosAjustados.fuerza * 1.10));
+    }
+
+    return { ...j, moral: moralConBonus, atributos: atributosAjustados };
   });
 
   const visitanteAjustados = rolesVisitante.map(r => {
@@ -307,27 +335,53 @@ export function simularPartido(local: Equipo, visitante: Equipo, jugadores: Juga
     for (const key of Object.keys(atributosAjustados) as (keyof AtributosJugador)[]) {
       atributosAjustados[key] = Math.max(1, Math.round(atributosAjustados[key] * comp));
     }
+
+    // --- LLUVIA TORRENCIAL ---
+    if (clima === 'Lluvia Torrencial') {
+      atributosAjustados.pase = Math.max(1, Math.round(atributosAjustados.pase * 0.80));
+    }
+
+    // --- NIEVE ---
+    if (clima === 'Nieve') {
+      if (['ED', 'EI', 'DC'].includes(j.posicion)) {
+        atributosAjustados.velocidad = Math.max(1, Math.round(atributosAjustados.velocidad * 0.85));
+        atributosAjustados.aceleracion = Math.max(1, Math.round(atributosAjustados.aceleracion * 0.85));
+      }
+      atributosAjustados.fuerza = Math.min(20, Math.round(atributosAjustados.fuerza * 1.10));
+    }
+
     return { ...j, atributos: atributosAjustados };
   });
 
   // 2.1 CALCULAR PODER DE ATAQUE Y DE DEFENSA BASE
   // Ataque: Velocidad, Aceleración, Remate, Regate, Pase, Técnica y Visión
-  let ataqueLocal = localAjustados.reduce((acc, j) => 
+  let ataqueLocal = localAjustados.reduce((acc, j) =>
     acc + (j.atributos.remate * 1.5 + j.atributos.regate * 1.2 + j.atributos.pase * 1.2 + j.atributos.velocidad * 1.0 + j.atributos.aceleracion * 1.0 + j.atributos.tecnica * 1.2 + j.atributos.vision * 1.2), 0
   ) / numLocal;
 
-  let ataqueVisitante = visitanteAjustados.reduce((acc, j) => 
+  let ataqueVisitante = visitanteAjustados.reduce((acc, j) =>
     acc + (j.atributos.remate * 1.5 + j.atributos.regate * 1.2 + j.atributos.pase * 1.2 + j.atributos.velocidad * 1.0 + j.atributos.aceleracion * 1.0 + j.atributos.tecnica * 1.2 + j.atributos.vision * 1.2), 0
   ) / numVisitante;
 
   // Defensa: Defensa, Fuerza, Posicionamiento, Decisiones y Reflejos (para arqueros)
-  let defensaLocal = localAjustados.reduce((acc, j) => 
+  let defensaLocal = localAjustados.reduce((acc, j) =>
     acc + (j.atributos.defensa * 1.8 + j.atributos.fuerza * 1.4 + j.atributos.posicionamiento * 1.4 + j.atributos.decisiones * 1.2 + j.atributos.reflejos * 1.5), 0
   ) / numLocal;
 
-  let defensaVisitante = visitanteAjustados.reduce((acc, j) => 
+  let defensaVisitante = visitanteAjustados.reduce((acc, j) =>
     acc + (j.atributos.defensa * 1.8 + j.atributos.fuerza * 1.4 + j.atributos.posicionamiento * 1.4 + j.atributos.decisiones * 1.2 + j.atributos.reflejos * 1.5), 0
   ) / numVisitante;
+
+  // Aplicar modificador de Química del Vestuario (rango 0.85 a 1.15)
+  const chemL = local.quimicaVestuario !== undefined ? local.quimicaVestuario : 70;
+  const chemV = visitante.quimicaVestuario !== undefined ? visitante.quimicaVestuario : 70;
+  const chemModL = 0.85 + (chemL / 100) * 0.3;
+  const chemModV = 0.85 + (chemV / 100) * 0.3;
+
+  ataqueLocal *= chemModL;
+  defensaLocal *= chemModL;
+  ataqueVisitante *= chemModV;
+  defensaVisitante *= chemModV;
 
   // 2.5 APLICAR MODIFICADORES TÁCTICOS POR ESTILO DE JUEGO
   // Si es 'Ofensivo': Poder de Ataque +15%, Poder de Defensa -10%
@@ -366,9 +420,26 @@ export function simularPartido(local: Equipo, visitante: Equipo, jugadores: Juga
     ataqueVisitante *= 1.20;
   }
 
+  // --- MODIFICADORES DE CLIMA AL ATAQUE ---
+  // Lluvia Torrencial: Favorece a las tácticas de juego directo ("Largos al espacio") con +15% de ataque
+  if (clima === 'Lluvia Torrencial') {
+    if (local.estrategiaPases === 'Largos al espacio') {
+      ataqueLocal *= 1.15;
+    }
+    if (visitante.estrategiaPases === 'Largos al espacio') {
+      ataqueVisitante *= 1.15;
+    }
+  }
+
+  // Nieve: Reduce el ataque de ambos un 10% para simular juego trabado
+  if (clima === 'Nieve') {
+    ataqueLocal *= 0.90;
+    ataqueVisitante *= 0.90;
+  }
+
   // 3. GENERAR ENTRE 2 Y 3 CHANCES DE GOL (más realista, partidos menos prolíficos)
   const totalChances = Math.floor(Math.random() * 2) + 2; // 2 o 3 chances
-  
+
   // Generar minutos aleatorios en orden cronológico
   const minutos = Array.from({ length: totalChances }, () => Math.floor(Math.random() * 90) + 1).sort((a, b) => a - b);
 
@@ -376,29 +447,31 @@ export function simularPartido(local: Equipo, visitante: Equipo, jugadores: Juga
   let golesLocal = 0;
   let golesVisitante = 0;
 
-  eventos.push(`⚽ ¡Comienza el partido en el estadio ${local.estadio}! Asistencia: ${(local.capacidadEstadio * (0.8 + Math.random() * 0.2)).toFixed(0)} espectadores.`);
+  const climaTexto = clima === 'Lluvia Torrencial' ? 'bajo una lluvia torrencial' : clima === 'Nieve' ? 'bajo una intensa nevada' : 'con un clima soleado';
+  eventos.push(`⚽ ¡Comienza el partido en el estadio ${local.estadio} ${climaTexto}! Asistencia: ${(local.capacidadEstadio * (0.8 + Math.random() * 0.2)).toFixed(0)} espectadores.`);
 
   // 3.5 APLICAR FATIGA Y CHEQUEO DE LESIONES (Alineación inicial)
   inicialLocal.forEach(j => {
     // Registrar partido jugado
     j.partidosJugados = (j.partidosJugados || 0) + 1;
 
-    // Probabilidad de lesión muy baja por partido — solo excepcional
-    const probLesion = j.formaFisica < 60 ? 0.04 : j.formaFisica < 80 ? 0.015 : 0.003;
+    // Probabilidad de lesión muy baja por partido — aumenta 5% en Lluvia Torrencial
+    const baseProb = j.formaFisica < 60 ? 0.04 : j.formaFisica < 80 ? 0.015 : 0.003;
+    const probLesion = clima === 'Lluvia Torrencial' ? baseProb + 0.05 : baseProb;
     if (Math.random() < probLesion) {
       const semanas = Math.floor(Math.random() * 4) + 1;
       j.lesionado = true;
       j.semanasLesion = semanas;
       j.semanasLesionado = semanas;
       j.titular = false; // Ya no puede ser titular
-      
+
       const minLesion = Math.floor(Math.random() * 88) + 1;
       eventos.push(`Minuto ${minLesion}: 🚑 ¡Preocupación en el banquillo de ${local.nombreCorto}! ${j.nombre} sufre una dolorosa lesión y debe retirarse del campo.`);
     }
 
     // Desgaste físico del partido
     const esDesgasteAlto = ['MC', 'MCO', 'ED', 'EI'].includes(j.posicion);
-    const fatiga = esDesgasteAlto 
+    const fatiga = esDesgasteAlto
       ? Math.floor(Math.random() * 5) + 11 // 11% a 15%
       : Math.floor(Math.random() * 4) + 8;  // 8% a 11%
     j.formaFisica = Math.max(1, j.formaFisica - fatiga);
@@ -408,20 +481,22 @@ export function simularPartido(local: Equipo, visitante: Equipo, jugadores: Juga
     // Registrar partido jugado
     j.partidosJugados = (j.partidosJugados || 0) + 1;
 
-    const probLesion = j.formaFisica < 85 ? 0.15 : 0.02;
+    // Aumenta 5% en Lluvia Torrencial
+    const baseProb = j.formaFisica < 85 ? 0.15 : 0.02;
+    const probLesion = clima === 'Lluvia Torrencial' ? baseProb + 0.05 : baseProb;
     if (Math.random() < probLesion) {
       const semanas = Math.floor(Math.random() * 4) + 1;
       j.lesionado = true;
       j.semanasLesion = semanas;
       j.semanasLesionado = semanas;
       j.titular = false; // Ya no puede ser titular
-      
+
       const minLesion = Math.floor(Math.random() * 88) + 1;
       eventos.push(`Minuto ${minLesion}: 🚑 ¡Preocupación en el banquillo de ${visitante.nombreCorto}! ${j.nombre} sufre una dolorosa lesión y debe retirarse del campo.`);
     }
 
     const esDesgasteAlto = ['MC', 'MCO', 'ED', 'EI'].includes(j.posicion);
-    const fatiga = esDesgasteAlto 
+    const fatiga = esDesgasteAlto
       ? Math.floor(Math.random() * 5) + 11 // 11% a 15%
       : Math.floor(Math.random() * 4) + 8;  // 8% a 11%
     j.formaFisica = Math.max(1, j.formaFisica - fatiga);
@@ -436,7 +511,7 @@ export function simularPartido(local: Equipo, visitante: Equipo, jugadores: Juga
     // Evitamos al arquero en los remates si hay más jugadores disponibles
     const deCampo = inicial.filter(j => j.posicion !== 'POR');
     const elegibles = deCampo.length > 0 ? deCampo : inicial;
-    
+
     // Selección ponderada según el atributo de remate
     const sumaRemate = elegibles.reduce((acc, j) => acc + j.atributos.remate, 0);
     let rand = Math.random() * sumaRemate;
@@ -482,10 +557,10 @@ export function simularPartido(local: Equipo, visitante: Equipo, jugadores: Juga
         golesLocal++;
         const asistidorAjustado = elegirAsistidor(localAjustados, tirador.id);
         const asistidor = asistidorAjustado ? inicialLocal.find(j => j.id === asistidorAjustado.id)! : null;
-        
+
         // Incrementar estadísticas individuales del jugador original
         tirador.goles = (tirador.goles || 0) + 1;
-        
+
         if (asistidor) {
           asistidor.asistencias = (asistidor.asistencias || 0) + 1;
           eventos.push(`Minuto ${minuto}: 🔴 ¡GOOOL de ${local.nombre}! ${tirador.nombre} define con clase tras una habilitación milimétrica de ${asistidor.nombre}. (Marcador: ${golesLocal}-${golesVisitante})`);
@@ -515,10 +590,10 @@ export function simularPartido(local: Equipo, visitante: Equipo, jugadores: Juga
         golesVisitante++;
         const asistidorAjustado = elegirAsistidor(visitanteAjustados, tirador.id);
         const asistidor = asistidorAjustado ? inicialVisitante.find(j => j.id === asistidorAjustado.id)! : null;
-        
+
         // Incrementar estadísticas individuales del jugador original
         tirador.goles = (tirador.goles || 0) + 1;
-        
+
         if (asistidor) {
           asistidor.asistencias = (asistidor.asistencias || 0) + 1;
           eventos.push(`Minuto ${minuto}: 🔵 ¡GOOOL de ${visitante.nombre}! ${tirador.nombre} conecta un disparo cruzado espectacular gracias a un centro preciso de ${asistidor.nombre}. (Marcador: ${golesLocal}-${golesVisitante})`);

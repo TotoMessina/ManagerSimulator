@@ -1,4 +1,4 @@
-export type Posicion = 
+export type Posicion =
   | 'POR'  // Portero (Goalkeeper)
   | 'DFC'  // Defensa Central (Center Back)
   | 'LD'   // Lateral Derecho (Right Back)
@@ -43,6 +43,21 @@ export interface PromesaGestion {
   partidosTranscurridos?: number;
 }
 
+// ==========================================
+// REUNIÓN PRIVADA EN LA OFICINA DEL MÁNAGER
+// ==========================================
+export interface ReunionPrivada {
+  jugadorId: string;
+  jugadorNombre: string;
+  posicion: string;
+  edad: number;
+  personalidad: PersonalidadJugador;
+  moral: number;
+  tienePromesaIncumplida: boolean;
+  mensajeProblema: string; // Lo que dice el jugador al mánager
+  tipoProblem: 'moral_baja' | 'promesa_incumplida';
+}
+
 export interface CharlaJugador {
   jugadorId: string;
   jugadorNombre: string;
@@ -62,20 +77,24 @@ export interface Jugador {
   promesaMinutosActive?: boolean;   // Control de promesas de minutos del DT
   transferidoForzado?: boolean;     // Control para forzar oferta de transferencia de la IA
   intransferible?: boolean;          // Marcado manualmente como no vendible por el DT
+  esCapitan?: boolean;               // Indica si el jugador es el capitán actual
+  listaTransferibles?: boolean;      // Indica si el jugador está listado para transferir
   rolTactico?: 'Hombre de Área' | 'Delantero Avanzado' | 'Pivote Defensivo' | 'Organizador' | null;
   entrenamientoIndividual?: keyof AtributosJugador | null;
   esPateadorPenales?: boolean;
   esPateadorTirosLibres?: boolean;
   esPateadorCorners?: boolean;
   promesas?: PromesaGestion[];
-  
+  promesaTitularPendiente?: boolean; // DT le prometió titularidad en el próximo partido
+  amigosVestuarioIds?: string[];     // IDs de jugadores amigos (afectados por contagio de moral)
+
   // Calidad (1-100)
   ca: number; // Calidad Actual (Current Ability)
   pa: number; // Calidad Potencial (Potential Ability)
-  
+
   // Atributos detallados (1-20)
   atributos: AtributosJugador;
-  
+
   // Variables de Estado (1-100)
   formaFisica: number; // Estado físico actual (100% es óptimo, baja al jugar y sube al descansar)
   moral: number;       // Estado de ánimo actual (1-100)
@@ -85,10 +104,14 @@ export interface Jugador {
   mesesContrato?: number;   // Meses de contrato restantes
   titular?: boolean;    // ¿Está seleccionado en el once inicial?
   posicionTactica?: string | null; // Slot táctico ocupado en la cancha (ej. 'DEF-0')
-  
+
   // Datos Financieros y Estadísticas
   valorMercado: number; // Valor estimado en Euros (€)
   salarioSemanal: number; // Salario en Euros (€)
+  clausulaRescision?: number;
+  preacuerdoClubId?: string | null;
+  preacuerdoSalario?: number;
+  preacuerdoClausula?: number;
   goles: number;
   asistencias: number;
   partidosJugados: number;
@@ -115,6 +138,10 @@ export interface Equipo {
   enfoqueEntrenamiento?: 'Físico' | 'Táctico' | 'Técnico';
   estrategiaCorner?: 'Atacar el primer palo' | 'Centro al área chica' | 'Jugar en corto';
   estrategiaPases?: 'Cortos' | 'Combinados' | 'Largos al espacio';
+  quimicaVestuario?: number;         // Nivel de química del vestuario (0-100)
+  semanaCharlaRealizada?: boolean;   // Cooldown de charla motivacional semanal
+  semanaActividadRealizada?: boolean; // Cooldown de actividad de cohesión semanal
+  sinEntrenador?: boolean;           // Indica si el club IA no tiene entrenador actual
 }
 
 export interface TablaEquipo {
@@ -143,6 +170,7 @@ export interface Liga {
 export interface PartidoFixture {
   localId: string;
   visitanteId: string;
+  clima?: 'Soleado' | 'Lluvia Torrencial' | 'Nieve';
 }
 
 export interface Jornada {
@@ -176,6 +204,7 @@ export interface OfertaRecibida {
   clubCompradorReputacion: number;
   montoOfrecido: number;
   multiplicador: number;
+  esClausula?: boolean;
 }
 
 export interface AcademiaReporte {
@@ -207,6 +236,7 @@ export interface PartidoCopa {
   penalesVisitante?: number;
   jugado: boolean;
   eventos?: string[];
+  clima?: 'Soleado' | 'Lluvia Torrencial' | 'Nieve';
 }
 
 export interface GrupoCopa {
@@ -303,3 +333,24 @@ export interface CopaCampeones {
   } | null;
   campeon: string | null;
 }
+
+export interface SorteoCopaActivo {
+  tipo: 'champions' | 'europa';
+  fase: 'grupos' | 'cuartos';
+  copa: CopaCampeones;
+  participantes: string[];
+}
+
+export interface FanTweet {
+  id: string;
+  avatar: string;
+  usuario: string;
+  handle: string;
+  color: string;
+  mensaje: string;
+  likes: number;
+  retweets: number;
+  hashtag: string;
+  tiempo: string;
+}
+

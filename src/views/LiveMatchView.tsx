@@ -32,6 +32,28 @@ export const LiveMatchView: React.FC = () => {
   const equipoUsuario = esLocalUsuario ? local : visitante;
   const equipoRival = esLocalUsuario ? visitante : local;
 
+  const clima = partidoEnVivo.clima || 'Soleado';
+
+  const CLIMA_DETALLES = {
+    'Soleado': {
+      nombre: 'Soleado',
+      icono: '☀️',
+      descripcion: 'Clima ideal. Sin penalizaciones a los atributos de los jugadores.',
+    },
+    'Lluvia Torrencial': {
+      nombre: 'Lluvia Torrencial',
+      icono: '🌧️',
+      descripcion: 'Baja un 20% la precisión de los pases de todos los jugadores. Aumenta un 5% el riesgo de lesiones. Favorece a las tácticas de pases largos (+15% ataque).',
+    },
+    'Nieve': {
+      nombre: 'Nieve',
+      icono: '❄️',
+      descripcion: 'Reduce la velocidad y aceleración de extremos y delanteros un 15%. Aumenta la fuerza general un 10%. El partido es más trabado en el mediocampo (-10% ataque global).',
+    }
+  };
+
+  const climaInfo = CLIMA_DETALLES[clima];
+
   // --- ESTADOS DEL PARTIDO ---
   const [minuto, setMinuto] = useState<number>(0);
   const [golesLocal, setGolesLocal] = useState<number>(0);
@@ -41,6 +63,51 @@ export const LiveMatchView: React.FC = () => {
   const [enJuego, setEnJuego] = useState<boolean>(true);
   const [ordenActiva, setOrdenActiva] = useState<'ataque' | 'presion' | 'retencion' | null>(null);
   const [velocidad, setVelocidad] = useState<number>(500); // Velocidad en ms por minuto (500: Normal, 150: Rápida, 40: Ultra)
+
+  // --- ESTADOS DE MOMENTUM ---
+  const [golesLocalMinutos, setGolesLocalMinutos] = useState<number[]>([]);
+  const [golesVisitanteMinutos, setGolesVisitanteMinutos] = useState<number[]>([]);
+  const [rojasLocal, setRojasLocal] = useState<number>(0);
+  const [rojasVisitante, setRojasVisitante] = useState<number>(0);
+  const [momentum, setMomentum] = useState<number>(0);
+
+  // Helper para calcular el momentum en cualquier minuto de la simulación
+  const calcularMomentum = (
+    m: number,
+    gLMinutos: number[],
+    gVMinutos: number[],
+    rLCount: number,
+    rVCount: number,
+    glsLocal: number,
+    glsVisitante: number
+  ): number => {
+    let val = 0;
+
+    // 1. Goles en los últimos 10 minutos (boost de +20 al anotador)
+    gLMinutos.forEach(g => {
+      if (m > g && m <= g + 10) {
+        val += 20;
+      }
+    });
+
+    gVMinutos.forEach(g => {
+      if (m > g && m <= g + 10) {
+        val -= 20;
+      }
+    });
+
+    // 2. Tarjetas rojas (penalización de -30 al sancionado)
+    val -= rLCount * 30;
+    val += rVCount * 30;
+
+    // 3. IA perdiendo de local en los últimos 10 minutos (+15 por presión de afición)
+    if (!esLocalUsuario && glsVisitante > glsLocal && m >= 80) {
+      val += 15;
+    }
+
+    // Capping estrictamente entre -50 y +50
+    return Math.max(-50, Math.min(50, val));
+  };
   
   // --- ESTADOS DE CHARLAS Y GRITOS TÉCNICOS ---
   const [charlaPreMatch, setCharlaPreMatch] = useState<'motivadora' | 'calmada' | 'tactica' | null>(null);
@@ -95,7 +162,7 @@ export const LiveMatchView: React.FC = () => {
   useEffect(() => {
     if (!unaVezInicial.current) {
       const initialComments = [
-        `⚽ ¡Comienza la transmisión del partido! Los equipos saltan a la cancha del estadio ${local.estadio}. Asistencia: ${(local.capacidadEstadio * (0.85 + Math.random() * 0.15)).toFixed(0)} espectadores.`,
+        `⚽ ¡Comienza la transmisión del partido! Los equipos saltan a la cancha del estadio ${local.estadio} ${clima === 'Lluvia Torrencial' ? 'bajo una lluvia torrencial' : clima === 'Nieve' ? 'bajo una intensa nevada' : 'con un clima soleado'}. Asistencia: ${(local.capacidadEstadio * (0.85 + Math.random() * 0.15)).toFixed(0)} espectadores.`,
         `📋 Alineación ${local.nombreCorto}: ${onceLocal.map(j => `${j.nombre} (${j.posicion})`).join(', ')}.`,
         `📋 Alineación ${visitante.nombreCorto}: ${onceVisitante.map(j => `${j.nombre} (${j.posicion})`).join(', ')}.`
       ];
@@ -258,6 +325,13 @@ export const LiveMatchView: React.FC = () => {
     // Copiar el estado de los jugadores en cancha para simular expulsiones/lesiones
     let canchaActual = [...jugadoresEnCancha];
 
+    // Copiar localmente los estados de rojas y minutos de goles para calcular momentum dinámico
+    let localGolesMins = [...golesLocalMinutos];
+    let visitanteGolesMins = [...golesVisitanteMinutos];
+    let rLCount = rojasLocal;
+    let rVCount = rojasVisitante;
+    let lastMomentum = momentum;
+
     // Simular los minutos restantes hasta el 90 de forma síncrona
     let activeGrito = gritoActivo;
     while (mActual < 90) {
@@ -292,7 +366,26 @@ export const LiveMatchView: React.FC = () => {
         for (const key of Object.keys(atributosAjustados) as (keyof typeof j.atributos)[]) {
           atributosAjustados[key] = Math.max(1, Math.round(atributosAjustados[key] * comp));
         }
-        return { ...j, atributos: atributosAjustados };
+
+        // --- LOCALÍA ---
+        atributosAjustados.determinacion = Math.min(20, Math.round(atributosAjustados.determinacion * 1.10));
+        const moralConBonus = Math.min(100, Math.round(j.moral * 1.10));
+
+        // --- LLUVIA TORRENCIAL ---
+        if (clima === 'Lluvia Torrencial') {
+          atributosAjustados.pase = Math.max(1, Math.round(atributosAjustados.pase * 0.80));
+        }
+
+        // --- NIEVE ---
+        if (clima === 'Nieve') {
+          if (['ED', 'EI', 'DC'].includes(j.posicion)) {
+            atributosAjustados.velocidad = Math.max(1, Math.round(atributosAjustados.velocidad * 0.85));
+            atributosAjustados.aceleracion = Math.max(1, Math.round(atributosAjustados.aceleracion * 0.85));
+          }
+          atributosAjustados.fuerza = Math.min(20, Math.round(atributosAjustados.fuerza * 1.10));
+        }
+
+        return { ...j, moral: moralConBonus, atributos: atributosAjustados };
       });
 
       const onceVAjustados = rolesV.map(r => {
@@ -303,6 +396,21 @@ export const LiveMatchView: React.FC = () => {
         for (const key of Object.keys(atributosAjustados) as (keyof typeof j.atributos)[]) {
           atributosAjustados[key] = Math.max(1, Math.round(atributosAjustados[key] * comp));
         }
+
+        // --- LLUVIA TORRENCIAL ---
+        if (clima === 'Lluvia Torrencial') {
+          atributosAjustados.pase = Math.max(1, Math.round(atributosAjustados.pase * 0.80));
+        }
+
+        // --- NIEVE ---
+        if (clima === 'Nieve') {
+          if (['ED', 'EI', 'DC'].includes(j.posicion)) {
+            atributosAjustados.velocidad = Math.max(1, Math.round(atributosAjustados.velocidad * 0.85));
+            atributosAjustados.aceleracion = Math.max(1, Math.round(atributosAjustados.aceleracion * 0.85));
+          }
+          atributosAjustados.fuerza = Math.min(20, Math.round(atributosAjustados.fuerza * 1.10));
+        }
+
         return { ...j, atributos: atributosAjustados };
       });
 
@@ -329,6 +437,32 @@ export const LiveMatchView: React.FC = () => {
       if (visitante.estiloJuego === 'Ofensivo') { atkV *= 1.15; defV *= 0.90; }
       else if (visitante.estiloJuego === 'Defensivo') { atkV *= 0.90; defV *= 1.15; }
 
+      // Aplicar modificador de Química del Vestuario (rango 0.85 a 1.15)
+      const chemL = local.quimicaVestuario !== undefined ? local.quimicaVestuario : 70;
+      const chemV = visitante.quimicaVestuario !== undefined ? visitante.quimicaVestuario : 70;
+      const chemModL = 0.85 + (chemL / 100) * 0.3;
+      const chemModV = 0.85 + (chemV / 100) * 0.3;
+
+      atkL *= chemModL;
+      defL *= chemModL;
+      atkV *= chemModV;
+      defV *= chemModV;
+
+      // --- MODIFICADORES DE CLIMA AL ATAQUE ---
+      if (clima === 'Lluvia Torrencial') {
+        if (local.estrategiaPases === 'Largos al espacio') {
+          atkL *= 1.15;
+        }
+        if (visitante.estrategiaPases === 'Largos al espacio') {
+          atkV *= 1.15;
+        }
+      }
+
+      if (clima === 'Nieve') {
+        atkL *= 0.90;
+        atkV *= 0.90;
+      }
+
       // Bonus de Balón Parado y Scouting del Rival
       const debilidadLocalOpp = obtenerDebilidadEquipo(visitante.id, jugadores);
       const localUsaEstrategiaValida = local.estrategiaPases === 'Largos al espacio' && local.estrategiaCorner === 'Atacar el primer palo';
@@ -352,6 +486,26 @@ export const LiveMatchView: React.FC = () => {
         else if (ordenActiva === 'retencion') { atkV *= 0.90; defV *= 1.10; }
       }
 
+      // --- APLICACIÓN DE MOMENTUM (INERCIA DEL PARTIDO) ---
+      const currentMomentum = calcularMomentum(
+        mActual,
+        localGolesMins,
+        visitanteGolesMins,
+        rLCount,
+        rVCount,
+        gL,
+        gV
+      );
+      lastMomentum = currentMomentum;
+
+      if (currentMomentum > 0) {
+        atkL *= (1 + currentMomentum / 100);
+        defL *= (1 + currentMomentum / 100);
+      } else if (currentMomentum < 0) {
+        atkV *= (1 + Math.abs(currentMomentum) / 100);
+        defV *= (1 + Math.abs(currentMomentum) / 100);
+      }
+
       // --- CÁLCULO DE POSESIÓN DINÁMICA ---
       const totalAtk = atkL + atkV;
       let posL = Math.round((atkL / totalAtk) * 100);
@@ -366,7 +520,7 @@ export const LiveMatchView: React.FC = () => {
       posFinal = posL;
 
       // Eventos
-      if (Math.random() < 0.035) {  // 3.5% de probabilidad por minuto (antes 7%)
+      if (Math.random() < 0.035) {  // 3.5% de probabilidad por minuto
         const esLocalAtacando = Math.random() < (atkL / totalAtk);
         const randEvento = Math.random();
 
@@ -382,6 +536,7 @@ export const LiveMatchView: React.FC = () => {
 
             if (fAtk > fDef) {
               gL += 1;
+              localGolesMins.push(mActual);
               goleadoresEnVivo.current[tirador.id] = (goleadoresEnVivo.current[tirador.id] || 0) + 1;
               
               const elegiblesAsist = onceL.filter(j => j.id !== tirador.id);
@@ -415,6 +570,7 @@ export const LiveMatchView: React.FC = () => {
 
             if (fAtk > fDef) {
               gV += 1;
+              visitanteGolesMins.push(mActual);
               goleadoresEnVivo.current[tirador.id] = (goleadoresEnVivo.current[tirador.id] || 0) + 1;
 
               const elegiblesAsist = onceV.filter(j => j.id !== tirador.id);
@@ -452,18 +608,39 @@ export const LiveMatchView: React.FC = () => {
 
           if (!esAmarilla) {
             canchaActual = canchaActual.filter(j => j.id !== jElegido.id);
+            if (jElegido.idEquipo === local.id) {
+              rLCount += 1;
+            } else {
+              rVCount += 1;
+            }
           }
         } else if (randEvento < 0.95) {
-          // --- LESIÓN (solo 5% de los eventos, muy raro) ---
+          // --- LESIÓN ---
           const todaPlantilla = [...onceL, ...onceV];
           const jElegido = todaPlantilla[Math.floor(Math.random() * todaPlantilla.length)];
           const semanas = Math.floor(Math.random() * 3) + 1;
           
           lesionadosEnVivo.current[jElegido.id] = semanas;
 
-          const descL = `🚑 Minuto ${mActual}: ¡Preocupación! ${jElegido.nombre} (${jElegido.idEquipo === local.id ? local.nombreCorto : visitante.nombreCorto}) se retira del partido lesionado.`;
+          const descL = clima === 'Lluvia Torrencial'
+            ? `🚑 Minuto ${mActual}: ¡Preocupación! ${jElegido.nombre} (${jElegido.idEquipo === local.id ? local.nombreCorto : visitante.nombreCorto}) resbala en el campo mojado por la lluvia torrencial y sufre una dolorosa lesión física.`
+            : `🚑 Minuto ${mActual}: ¡Preocupación! ${jElegido.nombre} (${jElegido.idEquipo === local.id ? local.nombreCorto : visitante.nombreCorto}) sufre una dura torcedura física y debe retirarse del partido lesionado.`;
           nuevosComentarios.unshift(descL);
 
+          canchaActual = canchaActual.filter(j => j.id !== jElegido.id);
+        }
+      }
+
+      // --- CHEQUEO DE LESIÓN POR RESBALÓN DE LLUVIA EN SIMULACIÓN RÁPIDA ---
+      if (clima === 'Lluvia Torrencial' && Math.random() < 0.0006) {
+        const todaPlantilla = [...onceL, ...onceV];
+        if (todaPlantilla.length > 0) {
+          const jElegido = todaPlantilla[Math.floor(Math.random() * todaPlantilla.length)];
+          const semanas = Math.floor(Math.random() * 3) + 1;
+          lesionadosEnVivo.current[jElegido.id] = semanas;
+          
+          const descL = `🚑 Minuto ${mActual}: 🌧️ ¡Resbalón fatal! ${jElegido.nombre} (${jElegido.idEquipo === local.id ? local.nombreCorto : visitante.nombreCorto}) patina sobre el césped mojado por la lluvia torrencial y se lesiona gravemente.`;
+          nuevosComentarios.unshift(descL);
           canchaActual = canchaActual.filter(j => j.id !== jElegido.id);
         }
       }
@@ -474,6 +651,11 @@ export const LiveMatchView: React.FC = () => {
     setGolesVisitante(gV);
     setPosesion(posFinal);
     setJugadoresEnCancha(canchaActual);
+    setGolesLocalMinutos(localGolesMins);
+    setGolesVisitanteMinutos(visitanteGolesMins);
+    setRojasLocal(rLCount);
+    setRojasVisitante(rVCount);
+    setMomentum(lastMomentum);
     setComentarios(nuevosComentarios);
     setEnJuego(false);
   };
@@ -530,7 +712,26 @@ export const LiveMatchView: React.FC = () => {
           for (const key of Object.keys(atributosAjustados) as (keyof typeof j.atributos)[]) {
             atributosAjustados[key] = Math.max(1, Math.round(atributosAjustados[key] * comp));
           }
-          return { ...j, atributos: atributosAjustados };
+
+          // --- LOCALÍA ---
+          atributosAjustados.determinacion = Math.min(20, Math.round(atributosAjustados.determinacion * 1.10));
+          const moralConBonus = Math.min(100, Math.round(j.moral * 1.10));
+
+          // --- LLUVIA TORRENCIAL ---
+          if (clima === 'Lluvia Torrencial') {
+            atributosAjustados.pase = Math.max(1, Math.round(atributosAjustados.pase * 0.80));
+          }
+
+          // --- NIEVE ---
+          if (clima === 'Nieve') {
+            if (['ED', 'EI', 'DC'].includes(j.posicion)) {
+              atributosAjustados.velocidad = Math.max(1, Math.round(atributosAjustados.velocidad * 0.85));
+              atributosAjustados.aceleracion = Math.max(1, Math.round(atributosAjustados.aceleracion * 0.85));
+            }
+            atributosAjustados.fuerza = Math.min(20, Math.round(atributosAjustados.fuerza * 1.10));
+          }
+
+          return { ...j, moral: moralConBonus, atributos: atributosAjustados };
         });
 
         const onceVAjustados = rolesV.map(r => {
@@ -541,6 +742,21 @@ export const LiveMatchView: React.FC = () => {
           for (const key of Object.keys(atributosAjustados) as (keyof typeof j.atributos)[]) {
             atributosAjustados[key] = Math.max(1, Math.round(atributosAjustados[key] * comp));
           }
+
+          // --- LLUVIA TORRENCIAL ---
+          if (clima === 'Lluvia Torrencial') {
+            atributosAjustados.pase = Math.max(1, Math.round(atributosAjustados.pase * 0.80));
+          }
+
+          // --- NIEVE ---
+          if (clima === 'Nieve') {
+            if (['ED', 'EI', 'DC'].includes(j.posicion)) {
+              atributosAjustados.velocidad = Math.max(1, Math.round(atributosAjustados.velocidad * 0.85));
+              atributosAjustados.aceleracion = Math.max(1, Math.round(atributosAjustados.aceleracion * 0.85));
+            }
+            atributosAjustados.fuerza = Math.min(20, Math.round(atributosAjustados.fuerza * 1.10));
+          }
+
           return { ...j, atributos: atributosAjustados };
         });
 
@@ -567,6 +783,32 @@ export const LiveMatchView: React.FC = () => {
         if (visitante.estiloJuego === 'Ofensivo') { atkV *= 1.15; defV *= 0.90; }
         else if (visitante.estiloJuego === 'Defensivo') { atkV *= 0.90; defV *= 1.15; }
 
+        // Aplicar modificador de Química del Vestuario (rango 0.85 a 1.15)
+        const chemL = local.quimicaVestuario !== undefined ? local.quimicaVestuario : 70;
+        const chemV = visitante.quimicaVestuario !== undefined ? visitante.quimicaVestuario : 70;
+        const chemModL = 0.85 + (chemL / 100) * 0.3;
+        const chemModV = 0.85 + (chemV / 100) * 0.3;
+
+        atkL *= chemModL;
+        defL *= chemModL;
+        atkV *= chemModV;
+        defV *= chemModV;
+
+        // --- MODIFICADORES DE CLIMA AL ATAQUE ---
+        if (clima === 'Lluvia Torrencial') {
+          if (local.estrategiaPases === 'Largos al espacio') {
+            atkL *= 1.15;
+          }
+          if (visitante.estrategiaPases === 'Largos al espacio') {
+            atkV *= 1.15;
+          }
+        }
+
+        if (clima === 'Nieve') {
+          atkL *= 0.90;
+          atkV *= 0.90;
+        }
+
         // Bonus de Balón Parado y Scouting del Rival
         const debilidadLocalOpp = obtenerDebilidadEquipo(visitante.id, jugadores);
         const localUsaEstrategiaValida = local.estrategiaPases === 'Largos al espacio' && local.estrategiaCorner === 'Atacar el primer palo';
@@ -588,6 +830,26 @@ export const LiveMatchView: React.FC = () => {
           if (ordenActiva === 'ataque') { atkV *= 1.25; defV *= 0.85; }
           else if (ordenActiva === 'presion') { atkV *= 1.10; defV *= 1.15; }
           else if (ordenActiva === 'retencion') { atkV *= 0.90; defV *= 1.10; }
+        }
+
+        // --- APLICACIÓN DE MOMENTUM (INERCIA DEL PARTIDO) ---
+        const currentMomentum = calcularMomentum(
+          nuevoMin,
+          golesLocalMinutos,
+          golesVisitanteMinutos,
+          rojasLocal,
+          rojasVisitante,
+          golesLocal,
+          golesVisitante
+        );
+        setMomentum(currentMomentum);
+
+        if (currentMomentum > 0) {
+          atkL *= (1 + currentMomentum / 100);
+          defL *= (1 + currentMomentum / 100);
+        } else if (currentMomentum < 0) {
+          atkV *= (1 + Math.abs(currentMomentum) / 100);
+          defV *= (1 + Math.abs(currentMomentum) / 100);
         }
 
         // --- CÁLCULO DE POSESIÓN DINÁMICA ---
@@ -624,6 +886,7 @@ export const LiveMatchView: React.FC = () => {
               if (fAtk > fDef) {
                 // ¡GOOOL LOCAL!
                 setGolesLocal(g => g + 1);
+                setGolesLocalMinutos(prev => [...prev, nuevoMin]);
                 goleadoresEnVivo.current[tirador.id] = (goleadoresEnVivo.current[tirador.id] || 0) + 1;
                 
                 // Ponderar asistidor
@@ -634,7 +897,7 @@ export const LiveMatchView: React.FC = () => {
                 let descGol = '';
                 if (tieneAsistencia && asistidor) {
                   asistidoresEnVivo.current[asistidor.id] = (asistidoresEnVivo.current[asistidor.id] || 0) + 1;
-                  descGol = `⚽ Minuto ${nuevoMin}: 🔴 ¡GOOOL de ${local.nombre}! ${tirador.nombre} define de volea tras un gran pase elevado de ${asistidor.nombre}. (Marcador: ${golesLocal + 1}-${golesVisitante})`;
+                  descGol = `⚽ Minuto ${nuevoMin}: 🔴 ¡GOOOL de ${local.nombre}! ${tirador.nombre} define de volea tras un gran pase de ${asistidor.nombre}. (Marcador: ${golesLocal + 1}-${golesVisitante})`;
                 } else {
                   descGol = `⚽ Minuto ${nuevoMin}: 🔴 ¡GOOOL de ${local.nombre}! ${tirador.nombre} liquida en un mano a mano con un remate cruzado brillante. (Marcador: ${golesLocal + 1}-${golesVisitante})`;
                 }
@@ -662,6 +925,7 @@ export const LiveMatchView: React.FC = () => {
               if (fAtk > fDef) {
                 // ¡GOOOL VISITANTE!
                 setGolesVisitante(g => g + 1);
+                setGolesVisitanteMinutos(prev => [...prev, nuevoMin]);
                 goleadoresEnVivo.current[tirador.id] = (goleadoresEnVivo.current[tirador.id] || 0) + 1;
 
                 const elegiblesAsist = onceVisitante.filter(j => j.id !== tirador.id);
@@ -700,22 +964,43 @@ export const LiveMatchView: React.FC = () => {
             lanzarEventoDestacado('tarjeta', descT);
 
             if (!esAmarilla) {
+              if (jElegido.idEquipo === local.id) {
+                setRojasLocal(r => r + 1);
+              } else {
+                setRojasVisitante(r => r + 1);
+              }
               // Remover jugador expulsado
               setJugadoresEnCancha(prev => prev.filter(j => j.id !== jElegido.id));
             }
           } else if (randEvento < 0.95) {
-            // --- LESIÓN (solo 5% de los eventos, muy raro) ---
+            // --- LESIÓN ---
             const todaPlantilla = [...onceLocal, ...onceVisitante];
             const jElegido = todaPlantilla[Math.floor(Math.random() * todaPlantilla.length)];
             const semanas = Math.floor(Math.random() * 3) + 1;
             
             lesionadosEnVivo.current[jElegido.id] = semanas;
 
-            const descL = `🚑 Minuto ${nuevoMin}: ¡Preocupación! ${jElegido.nombre} (${jElegido.idEquipo === local.id ? local.nombreCorto : visitante.nombreCorto}) sufre una dura torcedura física y debe retirarse del partido lesionado.`;
+            const descL = clima === 'Lluvia Torrencial'
+              ? `🚑 Minuto ${nuevoMin}: ¡Preocupación! ${jElegido.nombre} (${jElegido.idEquipo === local.id ? local.nombreCorto : visitante.nombreCorto}) resbala en el campo mojado por la lluvia torrencial y sufre una dolorosa lesión física.`
+              : `🚑 Minuto ${nuevoMin}: ¡Preocupación! ${jElegido.nombre} (${jElegido.idEquipo === local.id ? local.nombreCorto : visitante.nombreCorto}) sufre una dura torcedura física y debe retirarse del partido lesionado.`;
             
             lanzarEventoDestacado('lesion', descL);
 
             // Remover jugador de la cancha de inmediato
+            setJugadoresEnCancha(prev => prev.filter(j => j.id !== jElegido.id));
+          }
+        }
+
+        // --- CHEQUEO DE LESIÓN POR RESBALÓN DE LLUVIA (5% de riesgo adicional por partido) ---
+        if (clima === 'Lluvia Torrencial' && Math.random() < 0.0006 && enJuego && !modalSustituciones) {
+          const todaPlantilla = [...onceLocal, ...onceVisitante];
+          if (todaPlantilla.length > 0) {
+            const jElegido = todaPlantilla[Math.floor(Math.random() * todaPlantilla.length)];
+            const semanas = Math.floor(Math.random() * 3) + 1;
+            lesionadosEnVivo.current[jElegido.id] = semanas;
+            
+            const descL = `🚑 Minuto ${nuevoMin}: 🌧️ ¡Resbalón fatal! ${jElegido.nombre} (${jElegido.idEquipo === local.id ? local.nombreCorto : visitante.nombreCorto}) patina sobre el césped mojado por la lluvia torrencial y se lesiona gravemente.`;
+            lanzarEventoDestacado('lesion', descL);
             setJugadoresEnCancha(prev => prev.filter(j => j.id !== jElegido.id));
           }
         }
@@ -818,7 +1103,7 @@ export const LiveMatchView: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#0b0f19] text-slate-100 flex flex-col p-6 relative overflow-hidden font-sans">
+    <div className="min-h-screen bg-[#0b0f19] text-slate-100 flex flex-col p-6 relative overflow-x-hidden overflow-y-auto font-sans">
       
       {/* Luces y brillos de fondo */}
       <div className="absolute top-[-20%] left-[-10%] w-[600px] h-[600px] rounded-full bg-teal-500/5 blur-[150px] pointer-events-none"></div>
@@ -846,9 +1131,24 @@ export const LiveMatchView: React.FC = () => {
 
       {/* Cabecera de la Transmisión: Marcador Gigante */}
       <div className="bg-slate-900/60 backdrop-blur-md rounded-2xl border border-slate-800 p-6 flex flex-col items-center justify-between shadow-2xl relative mb-6">
-        <div className="text-[10px] uppercase font-bold text-teal-400 tracking-widest mb-3 flex items-center gap-1.5">
-          <span className="w-2 h-2 rounded-full bg-red-500 animate-ping"></span>
-          Transmisión Oficial en Vivo
+        <div className="w-full flex justify-between items-center mb-3">
+          <div className="text-[10px] uppercase font-bold text-teal-400 tracking-widest flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-red-500 animate-ping"></span>
+            Transmisión Oficial en Vivo
+          </div>
+          
+          {climaInfo && (
+            <div className="flex items-center gap-1.5 text-xs bg-slate-950/65 border border-slate-850 px-3 py-1 rounded-full group relative cursor-help">
+              <span>{climaInfo.icono}</span>
+              <span className="font-bold text-slate-300">{climaInfo.nombre}</span>
+              
+              <div className="absolute right-0 top-full mt-2 w-72 p-3 bg-slate-900 border border-slate-800 text-[11px] rounded-xl shadow-2xl text-left hidden group-hover:block z-35 space-y-1.5 backdrop-blur-md">
+                <div className="font-bold text-teal-400 border-b border-slate-800 pb-1">{climaInfo.nombre}</div>
+                <p className="text-slate-300 leading-normal">{climaInfo.descripcion}</p>
+                <div className="text-slate-500 pt-1 text-[10px] italic">Localía: El local recibe +10% moral y determinación.</div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Tablero de Marcador */}
@@ -895,6 +1195,44 @@ export const LiveMatchView: React.FC = () => {
               style={{ width: `${100 - posesion}%` }}
               className="bg-slate-800 h-full transition-all duration-700"
             ></div>
+          </div>
+        </div>
+
+        {/* Barra de Momentum (Inercia del Partido) */}
+        <div className="w-full max-w-xl mt-4 space-y-2 border-t border-slate-800/40 pt-4">
+          <div className="flex justify-between items-center text-xs font-bold text-slate-400 tracking-wider">
+            <span className="flex items-center gap-1">
+              📈 Momentum:
+              <span className={momentum > 0 ? "text-teal-400 font-extrabold" : momentum < 0 ? "text-rose-400 font-extrabold" : "text-slate-400"}>
+                {momentum > 0 ? `+${momentum}% ${local.nombreCorto}` : momentum < 0 ? `+${Math.abs(momentum)}% ${visitante.nombreCorto}` : 'Equilibrio'}
+              </span>
+            </span>
+            <span className="text-[10px] text-slate-500 font-mono">
+              {momentum > 0 ? `Boost ofensivo/defensivo local` : momentum < 0 ? `Boost ofensivo/defensivo visitante` : `Sin bonificación`}
+            </span>
+          </div>
+          <div className="relative h-4 w-full bg-slate-950 rounded-full border border-slate-800 overflow-hidden flex shadow-inner">
+            {/* Barra Local */}
+            <div
+              style={{ width: `${50 + momentum}%` }}
+              className="bg-gradient-to-r from-teal-600 to-teal-400 h-full transition-all duration-500 ease-out shadow-lg"
+            ></div>
+            {/* Barra Visitante */}
+            <div
+              style={{ width: `${50 - momentum}%` }}
+              className="bg-gradient-to-r from-rose-500 to-rose-600 h-full transition-all duration-500 ease-out"
+            ></div>
+            {/* Línea Divisoria Central */}
+            <div className="absolute left-1/2 top-0 bottom-0 w-0.5 bg-slate-800/80 z-10"></div>
+            {/* Indicador Deslizante de Tug of War */}
+            <div
+              style={{ left: `calc(${50 + momentum}% - 6px)` }}
+              className="absolute top-0.5 bottom-0.5 w-3 bg-white rounded-full shadow-lg shadow-white/50 border border-slate-300 transition-all duration-500 ease-out z-20"
+            ></div>
+          </div>
+          <div className="flex justify-between text-[10px] text-slate-500 font-medium px-1">
+            <span>{local.nombreCorto} Domina</span>
+            <span>{visitante.nombreCorto} Domina</span>
           </div>
         </div>
       </div>

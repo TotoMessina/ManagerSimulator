@@ -12,7 +12,7 @@ const formatearMoneda = (valor: number): string => {
 };
 
 export const MercadoView: React.FC = () => {
-  const { jugadores, equipos, equipoUsuario, comprarJugador } = useGame();
+  const { jugadores, equipos, equipoUsuario, comprarJugador, ofrecerContratoLibre } = useGame();
 
   // Estados de filtros y ordenación
   const [busqueda, setBusqueda] = useState<string>('');
@@ -23,11 +23,18 @@ export const MercadoView: React.FC = () => {
   // Estado del modal de negociación
   const [jugadorAOfrecer, setJugadorAOfrecer] = useState<Jugador | null>(null);
   const [ofertaValor, setOfertaValor] = useState<number>(0);
+  const [clausulaOfrecidaCompra, setClausulaOfrecidaCompra] = useState<number>(0);
   const [feedbackNegociacion, setFeedbackNegociacion] = useState<{
     aceptado: boolean;
     mensaje: string;
   } | null>(null);
   const [promesaExigida, setPromesaExigida] = useState<PromesaGestion | null>(null);
+
+  // Estados para Bosman / Contrato Libre
+  const [jugadorBosman, setJugadorBosman] = useState<Jugador | null>(null);
+  const [sueldoBosman, setSueldoBosman] = useState<number>(0);
+  const [clausulaBosman, setClausulaBosman] = useState<number>(0);
+  const [feedbackBosman, setFeedbackBosman] = useState<{ aceptado: boolean; mensaje: string } | null>(null);
 
   if (!equipoUsuario) return null;
 
@@ -63,6 +70,7 @@ export const MercadoView: React.FC = () => {
   const abrirModalOferta = (jugador: Jugador) => {
     setJugadorAOfrecer(jugador);
     setOfertaValor(jugador.valorMercado); // Inicializar oferta en su valor de mercado actual
+    setClausulaOfrecidaCompra(Math.round((jugador.valorMercado * 1.8) / 1000) * 1000);
     setFeedbackNegociacion(null);
 
     // Generar promesa si es un jugador top (ca >= 80)
@@ -85,18 +93,43 @@ export const MercadoView: React.FC = () => {
     }
   };
 
+  // Abrir modal de preacuerdo Bosman
+  const abrirModalBosman = (jugador: Jugador) => {
+    setJugadorBosman(jugador);
+    const sueldoExigido = Math.max(
+      jugador.salarioSemanal * 1.15,
+      Math.round((jugador.ca ** 2) * 35)
+    );
+    setSueldoBosman(sueldoExigido);
+    setClausulaBosman(Math.round((jugador.valorMercado * 1.8) / 1000) * 1000);
+    setFeedbackBosman(null);
+  };
+
   // Ejecutar negociación de oferta
   const enviarOferta = (e: React.FormEvent) => {
     e.preventDefault();
     if (!jugadorAOfrecer) return;
-
-    const res = comprarJugador(jugadorAOfrecer.id, ofertaValor, promesaExigida);
+    const res = comprarJugador(jugadorAOfrecer.id, ofertaValor, promesaExigida, clausulaOfrecidaCompra > 0 ? clausulaOfrecidaCompra : undefined);
     setFeedbackNegociacion(res);
+  };
+
+  // Ejecutar preacuerdo Bosman
+  const enviarOfertaBosman = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!jugadorBosman) return;
+
+    if (!sueldoBosman || sueldoBosman <= 0) {
+      alert('El sueldo es obligatorio y debe ser mayor que 0.');
+      return;
+    }
+
+    const res = ofrecerContratoLibre(jugadorBosman.id, sueldoBosman, clausulaBosman > 0 ? clausulaBosman : undefined);
+    setFeedbackBosman(res);
   };
 
   return (
     <div className="space-y-6">
-      
+
       {/* Cabecera / Buscador */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-850 pb-4">
         <div>
@@ -126,17 +159,16 @@ export const MercadoView: React.FC = () => {
             <button
               key={pos}
               onClick={() => setFiltroPosicion(pos)}
-              className={`px-4 py-2 rounded-xl text-[10px] uppercase font-extrabold tracking-wider border transition-all duration-150 ${
-                filtroPosicion === pos
-                  ? 'bg-teal-600 border-teal-500 text-white shadow-md'
-                  : 'bg-slate-900/60 border-slate-850 text-slate-400 hover:text-slate-100 hover:bg-slate-800'
-              }`}
+              className={`px-4 py-2 rounded-xl text-[10px] uppercase font-extrabold tracking-wider border transition-all duration-150 ${filtroPosicion === pos
+                ? 'bg-teal-600 border-teal-500 text-white shadow-md'
+                : 'bg-slate-900/60 border-slate-850 text-slate-400 hover:text-slate-100 hover:bg-slate-800'
+                }`}
             >
               {pos === 'TODOS' ? 'Todos' :
-               pos === 'POR' ? 'Porteros (POR)' :
-               pos === 'DFC' ? 'Defensas (DEF)' :
-               pos === 'MC' ? 'Mediocampistas (MED)' :
-               'Delanteros (DEL)'}
+                pos === 'POR' ? 'Porteros (POR)' :
+                  pos === 'DFC' ? 'Defensas (DEF)' :
+                    pos === 'MC' ? 'Mediocampistas (MED)' :
+                      'Delanteros (DEL)'}
             </button>
           ))}
         </div>
@@ -212,16 +244,18 @@ export const MercadoView: React.FC = () => {
                   <th className="px-3 py-3.5">Posición</th>
                   <th className="px-3 py-3.5 text-center">CA / PA</th>
                   <th className="px-3 py-3.5 text-right">Valor de Mercado</th>
-                  <th className="px-4 py-3.5 text-center w-32">Operaciones</th>
+                  <th className="px-3 py-3.5 text-right">Cláusula</th>
+                  <th className="px-3 py-3.5 text-center">Contrato</th>
+                  <th className="px-4 py-3.5 text-center w-36">Operaciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/30">
                 {jugadoresOrdenados.map((jugador) => {
                   const clubPropietario = equipos.find(e => e.id === jugador.idEquipo);
-                  
+
                   return (
                     <tr key={jugador.id} className="hover:bg-slate-800/25 transition-colors duration-150">
-                      
+
                       {/* Nombre y Nacionalidad */}
                       <td className="px-4 py-4">
                         <div className="font-semibold text-slate-200">{jugador.nombre}</div>
@@ -236,12 +270,11 @@ export const MercadoView: React.FC = () => {
 
                       {/* Posición Pill */}
                       <td className="px-3 py-4">
-                        <span className={`text-[9px] font-extrabold px-2 py-0.5 rounded tracking-wide ${
-                          jugador.posicion === 'POR' ? 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20' :
+                        <span className={`text-[9px] font-extrabold px-2 py-0.5 rounded tracking-wide ${jugador.posicion === 'POR' ? 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20' :
                           jugador.posicion === 'DFC' || jugador.posicion === 'LI' || jugador.posicion === 'LD' ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' :
-                          jugador.posicion === 'MC' || jugador.posicion === 'MCO' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
-                          'bg-rose-500/10 text-rose-400 border border-rose-500/20'
-                        }`}>
+                            jugador.posicion === 'MC' || jugador.posicion === 'MCO' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
+                              'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                          }`}>
                           {jugador.posicion}
                         </span>
                       </td>
@@ -258,14 +291,39 @@ export const MercadoView: React.FC = () => {
                         {formatearMoneda(jugador.valorMercado)}
                       </td>
 
-                      {/* Botón de Fichaje */}
+                      {/* Cláusula */}
+                      <td className="px-3 py-4 text-right font-semibold text-amber-500 font-mono">
+                        {jugador.clausulaRescision && jugador.clausulaRescision > 0 ? formatearMoneda(jugador.clausulaRescision) : 'Sin cláusula'}
+                      </td>
+
+                      {/* Contrato */}
+                      <td className="px-3 py-4 text-center">
+                        <span className={`font-semibold font-mono ${jugador.mesesContrato !== undefined && jugador.mesesContrato <= 6
+                          ? 'text-rose-400 animate-pulse font-bold'
+                          : 'text-slate-400'
+                          }`}>
+                          {jugador.mesesContrato !== undefined ? `${jugador.mesesContrato} meses` : '---'}
+                        </span>
+                      </td>
+
+                      {/* Botones de Fichaje */}
                       <td className="px-4 py-4 text-center">
-                        <button
-                          onClick={() => abrirModalOferta(jugador)}
-                          className="px-4 py-1.5 bg-slate-800 hover:bg-teal-600 border border-slate-700 text-teal-400 hover:text-white font-bold rounded-lg transition-all text-[10px] uppercase tracking-wide"
-                        >
-                          Ofertar
-                        </button>
+                        <div className="flex flex-col sm:flex-row gap-1.5 justify-center items-center">
+                          <button
+                            onClick={() => abrirModalOferta(jugador)}
+                            className="w-full sm:w-auto px-3 py-1.5 bg-slate-800 hover:bg-teal-650 border border-slate-700 text-teal-450 hover:text-white font-bold rounded-lg transition-all text-[10px] uppercase tracking-wide"
+                          >
+                            Ofertar
+                          </button>
+                          {jugador.mesesContrato !== undefined && jugador.mesesContrato <= 6 && (
+                            <button
+                              onClick={() => abrirModalBosman(jugador)}
+                              className="w-full sm:w-auto px-2 py-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold rounded-lg transition-all text-[10px] uppercase tracking-wide whitespace-nowrap"
+                            >
+                              Fichar Libre
+                            </button>
+                          )}
+                        </div>
                       </td>
 
                     </tr>
@@ -287,7 +345,7 @@ export const MercadoView: React.FC = () => {
       {jugadorAOfrecer && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm overflow-y-auto">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col animate-fade-in my-8">
-            
+
             {/* Header del modal */}
             <div className="p-5 bg-slate-950 border-b border-slate-800 flex justify-between items-center">
               <div>
@@ -304,7 +362,7 @@ export const MercadoView: React.FC = () => {
 
             {/* Formulario y Detalles de Finanzas */}
             <div className="p-5 space-y-4">
-              
+
               <div className="bg-slate-950 p-4 border border-slate-805 rounded-xl space-y-3">
                 <div className="flex justify-between items-center text-xs">
                   <span className="text-slate-500">Valor de Mercado:</span>
@@ -315,20 +373,19 @@ export const MercadoView: React.FC = () => {
                   <span className="text-teal-400 font-bold">{formatearMoneda(equipoUsuario.presupuestoFichajes)}</span>
                 </div>
                 <div className="flex justify-between items-center text-xs border-t border-slate-850 pt-2.5">
-                   <span className="text-slate-500">Club Propietario:</span>
-                   <span className="text-slate-300 font-semibold">
-                     {jugadorAOfrecer.idEquipo === 'libre' ? 'Agente Libre' : (equipos.find(e => e.id === jugadorAOfrecer.idEquipo)?.nombre || 'Agente Libre')}
-                   </span>
+                  <span className="text-slate-500">Club Propietario:</span>
+                  <span className="text-slate-300 font-semibold">
+                    {jugadorAOfrecer.idEquipo === 'libre' ? 'Agente Libre' : (equipos.find(e => e.id === jugadorAOfrecer.idEquipo)?.nombre || 'Agente Libre')}
+                  </span>
                 </div>
               </div>
 
               {feedbackNegociacion ? (
                 /* Card de Feedback de la IA */
-                <div className={`p-4 rounded-xl border space-y-3 leading-relaxed text-xs ${
-                  feedbackNegociacion.aceptado
-                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-350 text-emerald-300'
-                    : 'bg-rose-500/10 border-rose-500/30 text-rose-350 text-rose-300'
-                }`}>
+                <div className={`p-4 rounded-xl border space-y-3 leading-relaxed text-xs ${feedbackNegociacion.aceptado
+                  ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-350 text-emerald-300'
+                  : 'bg-rose-500/10 border-rose-500/30 text-rose-350 text-rose-300'
+                  }`}>
                   <div className="flex items-center gap-2">
                     <span className="text-base">{feedbackNegociacion.aceptado ? '🟢' : '🔴'}</span>
                     <strong className="uppercase font-bold tracking-wider text-[10px]">
@@ -340,11 +397,10 @@ export const MercadoView: React.FC = () => {
                   <div className="flex justify-end pt-2">
                     <button
                       onClick={() => setJugadorAOfrecer(null)}
-                      className={`px-4 py-1.5 text-[10px] uppercase font-bold tracking-wider rounded-lg shadow-sm border transition-all ${
-                        feedbackNegociacion.aceptado
-                          ? 'bg-emerald-600 border-emerald-500 text-slate-950 hover:bg-emerald-500'
-                          : 'bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800'
-                      }`}
+                      className={`px-4 py-1.5 text-[10px] uppercase font-bold tracking-wider rounded-lg shadow-sm border transition-all ${feedbackNegociacion.aceptado
+                        ? 'bg-emerald-600 border-emerald-500 text-slate-950 hover:bg-emerald-500'
+                        : 'bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800'
+                        }`}
                     >
                       Entendido
                     </button>
@@ -366,6 +422,26 @@ export const MercadoView: React.FC = () => {
                       </div>
                     </div>
                   )}
+
+                  {jugadorAOfrecer.clausulaRescision && jugadorAOfrecer.clausulaRescision > 0 ? (
+                    <div className="p-3.5 bg-amber-500/10 border border-amber-500/20 text-amber-350 text-xs rounded-xl space-y-2">
+                      <div className="flex justify-between items-center">
+                        <span className="font-bold flex items-center gap-1.5 uppercase tracking-wide text-[10px]">
+                          ⚠️ Cláusula de Rescisión
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setOfertaValor(jugadorAOfrecer.clausulaRescision!)}
+                          className="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold rounded text-[9px] uppercase tracking-wider transition-colors"
+                        >
+                          Usar Cláusula ({formatearMoneda(jugadorAOfrecer.clausulaRescision)})
+                        </button>
+                      </div>
+                      <p className="text-[10px] text-slate-400 leading-normal">
+                        Si ofertas exactamente el monto de su cláusula de rescisión (<strong>{formatearMoneda(jugadorAOfrecer.clausulaRescision)}</strong>), el club vendedor estará obligado a vender y el fichaje se procesará directamente.
+                      </p>
+                    </div>
+                  ) : null}
 
                   {equipoUsuario.presupuestoFichajes <= 0 ? (
                     <div className="p-3 bg-rose-500/10 border border-rose-500/25 text-rose-400 text-xs rounded-lg">
@@ -395,6 +471,26 @@ export const MercadoView: React.FC = () => {
                     </span>
                   </div>
 
+                  {/* Campo de nueva cláusula de rescisión */}
+                  <div className="space-y-1.5">
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                      Nueva Cláusula de Rescisión (€) <span className="text-slate-400 font-normal">(Opcional)</span>Nueva Cláusula de Rescisión (€) <span className="text-rose-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        value={clausulaOfrecidaCompra || ''}
+                        onChange={(e) => setClausulaOfrecidaCompra(Number(e.target.value) || 0)}
+                        placeholder="Sin cláusula"
+                        className="w-full bg-slate-950 border border-slate-850 rounded-xl py-2.5 px-4 text-sm font-semibold text-slate-100 focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500 transition-all font-mono"
+                      />
+                      <span className="absolute right-4 inset-y-0 flex items-center text-xs font-extrabold text-slate-500">€</span>
+                    </div>
+                    <span className="text-[10px] text-slate-500 block leading-normal">
+                      Deja en blanco o ingresa 0 para no establecer una cláusula de rescisión.
+                    </span>
+                  </div>
+
                   <div className="flex justify-end gap-2.5 pt-3 border-t border-slate-850">
                     <button
                       type="button"
@@ -409,6 +505,133 @@ export const MercadoView: React.FC = () => {
                       className="px-5 py-2 bg-teal-600 hover:bg-teal-500 text-white font-bold rounded-lg text-xs uppercase tracking-wider shadow-md transition-all active:scale-95 disabled:opacity-50 disabled:pointer-events-none"
                     >
                       Enviar Propuesta
+                    </button>
+                  </div>
+                </form>
+              )}
+
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* ==========================================
+          MODAL DE FICHAJE BOSMAN / CONTRATO LIBRE
+          ========================================== */}
+      {jugadorBosman && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col animate-fade-in my-8">
+
+            {/* Header del modal */}
+            <div className="p-5 bg-slate-950 border-b border-slate-800 flex justify-between items-center border-t-4 border-t-purple-500">
+              <div>
+                <span className="text-[9px] uppercase font-bold text-slate-500 tracking-wider">Fichaje de Agente Libre (Bosman)</span>
+                <h3 className="text-base font-extrabold text-white mt-1 tracking-tight">Negociar con {jugadorBosman.nombre}</h3>
+              </div>
+              <button
+                onClick={() => setJugadorBosman(null)}
+                className="text-slate-500 hover:text-white transition-colors text-sm"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Contenido / Oferta */}
+            <div className="p-5 space-y-4">
+
+              {/* Información de contrato actual y exigencia */}
+              <div className="p-3 bg-slate-950 border border-purple-500/20 text-xs rounded-xl space-y-2">
+                <p className="text-slate-300 leading-relaxed">
+                  🗣️ <strong>Representante:</strong> "A mi cliente le quedan <strong>{jugadorBosman.mesesContrato} meses</strong> de contrato. Estamos dispuestos a acordar una de las primas salariales de incorporación gratuita el próximo 1 de Julio."
+                </p>
+                <div className="border-t border-slate-800 pt-2 flex justify-between items-center text-[10px]">
+                  <span className="text-slate-500">Salario Actual:</span>
+                  <span className="text-slate-400 font-mono">{formatearMoneda(jugadorBosman.salarioSemanal)}/sem</span>
+                </div>
+              </div>
+
+              {feedbackBosman ? (
+                /* Card de Feedback */
+                <div className={`p-4 rounded-xl border space-y-3 leading-relaxed text-xs ${feedbackBosman.aceptado
+                  ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                  : 'bg-rose-500/10 border-rose-500/30 text-rose-300'
+                  }`}>
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">{feedbackBosman.aceptado ? '🟢' : '🔴'}</span>
+                    <strong className="uppercase font-bold tracking-wider text-[10px]">Respuesta de Negociación</strong>
+                  </div>
+                  <p>{feedbackBosman.mensaje}</p>
+
+                  <div className="flex justify-end pt-2">
+                    <button
+                      onClick={() => setJugadorBosman(null)}
+                      className={`px-4 py-1.5 text-[10px] uppercase font-bold tracking-wider rounded-lg shadow-sm border transition-all ${feedbackBosman.aceptado
+                        ? 'bg-emerald-600 border-emerald-500 text-slate-950 hover:bg-emerald-500'
+                        : 'bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800'
+                        }`}
+                    >
+                      Entendido
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                /* Formulario */
+                <form onSubmit={enviarOfertaBosman} className="space-y-4">
+                  {/* Campo de Sueldo Semanal Ofrecido */}
+                  <div className="space-y-1.5">
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                      Sueldo Semanal Ofrecido (€/semana) <span className="text-rose-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min="1"
+                        value={sueldoBosman || ''}
+                        onChange={(e) => setSueldoBosman(Number(e.target.value))}
+                        className="w-full bg-slate-950 border border-slate-850 rounded-xl py-2.5 px-4 text-sm font-semibold text-slate-100 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all font-mono"
+                        required
+                      />
+                      <span className="absolute right-4 inset-y-0 flex items-center text-xs font-extrabold text-slate-500 font-mono">€/sem</span>
+                    </div>
+                  </div>
+
+                  {/* Campo de Cláusula de Rescisión */}
+                  <div className="space-y-1.5">
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                      Cláusula de Rescisión (€) <span className="text-slate-400 font-normal">(Opcional)</span>
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min="1000"
+                        step="50000"
+                        value={clausulaBosman || ''}
+                        onChange={(e) => setClausulaBosman(Number(e.target.value) || 0)}
+                        placeholder="Sin cláusula"
+                        className="w-full bg-slate-950 border border-slate-850 rounded-xl py-2.5 px-4 text-sm font-semibold text-slate-100 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all font-mono"
+                      />
+                      <span className="absolute right-4 inset-y-0 flex items-center text-xs font-extrabold text-slate-500 font-mono">€</span>
+                    </div>
+                    <span className="text-[10px] text-slate-500 block leading-normal">
+                      Deja en blanco o ingresa 0 para no establecer una cláusula de rescisión.
+                    </span>
+                  </div>
+
+                  <div className="flex justify-end gap-2.5 pt-3 border-t border-slate-850">
+                    <button
+                      type="button"
+                      onClick={() => setJugadorBosman(null)}
+                      className="px-4 py-2 bg-slate-950 border border-slate-850 hover:bg-slate-800 text-slate-400 hover:text-white font-bold rounded-lg text-xs uppercase tracking-wider transition-colors"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={sueldoBosman <= 0}
+                      className="px-5 py-2 bg-gradient-to-r from-purple-650 to-indigo-650 hover:from-purple-500 hover:to-indigo-500 text-white font-bold rounded-lg text-xs uppercase tracking-wider shadow-md transition-all active:scale-95 disabled:opacity-50 disabled:pointer-events-none"
+                    >
+                      Ofrecer Precontrato
                     </button>
                   </div>
                 </form>

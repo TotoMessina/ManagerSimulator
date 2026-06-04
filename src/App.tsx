@@ -15,6 +15,9 @@ import { CopaInternacionalView } from './views/CopaInternacionalView';
 import { EntrenamientoView } from './views/EntrenamientoView';
 import { EventoVestuarioModal } from './views/EventoVestuarioModal';
 import { DeadlineDayView } from './views/DeadlineDayView';
+import { PerfilManagerView } from './views/PerfilManagerView';
+import { OficinaManagerView } from './views/OficinaManagerView';
+import { SorteoCopasView } from './views/SorteoCopasView';
 
 // ==========================================
 // FORMATEADORES AUXILIARES
@@ -76,11 +79,26 @@ const AppContent: React.FC = () => {
     contraofertarRecibida,
     cerrarReporteAcademia,
     eventoActivo,
-    deadlineDayActivo
+    deadlineDayActivo,
+    nombreManager,
+    reputacionManager,
+    historialTitulos,
+    juegoIniciado,
+    aceptarOfertaEmpleo,
+    reunionPrivadaActiva,
+    sorteoCopaActivo
   } = useGame();
 
+  // ==========================================
+  // INTERCEPTOR: SORTEO DE COPAS INTERNACIONALES
+  // ==========================================
+  if (sorteoCopaActivo) {
+    return <SorteoCopasView />;
+  }
+
   // Estados de interfaz
-  const [vista, setVista] = useState<'dashboard' | 'plantel' | 'tabla' | 'mercado' | 'tactica' | 'analitica' | 'copa' | 'entrenamiento'>('dashboard');
+  const [vista, setVista] = useState<'dashboard' | 'plantel' | 'tabla' | 'mercado' | 'tactica' | 'analitica' | 'copa' | 'entrenamiento' | 'perfil'>('dashboard');
+  const [nombreManagerInput, setNombreManagerInput] = useState<string>('DT Mánager');
   
   // Estados para la selección de equipos
   const [ligaSeleccionada, setLigaSeleccionada] = useState<'todas' | 'espana' | 'inglaterra' | 'italia' | 'alemania'>('todas');
@@ -120,6 +138,13 @@ const AppContent: React.FC = () => {
         {eventoActivo && <EventoVestuarioModal evento={eventoActivo} />}
       </>
     );
+  }
+
+  // ==========================================
+  // INTERCEPTOR: REUNIÓN PRIVADA EN LA OFICINA
+  // ==========================================
+  if (reunionPrivadaActiva) {
+    return <OficinaManagerView />;
   }
 
   // ==========================================
@@ -187,59 +212,9 @@ const AppContent: React.FC = () => {
   }
 
   // ==========================================
-  // PANTALLA DE GAME OVER POR DESTITUCIÓN (BAJA CONFIANZA)
-  // ==========================================
-  if (confianzaDirectiva < 20) {
-    return (
-      <div className="min-h-screen bg-[#0b0f19] text-slate-100 flex flex-col items-center justify-center p-6 relative overflow-hidden">
-        {/* Decoraciones de fondo rojas para denotar peligro */}
-        <div className="absolute top-[-20%] left-[-10%] w-[500px] h-[500px] rounded-full bg-rose-500/10 blur-[120px]"></div>
-        <div className="absolute bottom-[-20%] right-[-10%] w-[500px] h-[500px] rounded-full bg-red-500/10 blur-[120px]"></div>
-
-        <div className="z-10 text-center max-w-xl bg-slate-900/60 backdrop-blur-md rounded-2xl p-8 border border-rose-500/30 shadow-2xl border-t-4 border-t-rose-500">
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-rose-500/10 border border-rose-500/20 text-rose-400 mb-6 font-medium text-xs tracking-wider uppercase">
-            🚨 Destitución Inmediata
-          </div>
-          <h1 className="text-4xl font-extrabold tracking-tight mb-4 text-rose-500">
-            ¡DESTITUIDO!
-          </h1>
-          <h2 className="text-xl font-bold text-slate-200 mb-4">
-            Despedido por Pérdida de Confianza
-          </h2>
-          <p className="text-slate-400 text-sm leading-relaxed mb-8">
-            La directiva de <strong>{equipoUsuario?.nombre}</strong> ha decidido rescindir tu contrato de inmediato. Tras una racha prolongada de malos resultados o declaraciones públicas desastrosas, la directiva ha perdido toda confianza en tu proyecto deportivo.
-          </p>
-
-          <div className="bg-slate-950/80 rounded-xl p-4 border border-slate-800 text-left space-y-2 mb-8 text-xs">
-            <div className="flex justify-between">
-              <span className="text-slate-500">Club:</span>
-              <span className="font-bold text-slate-300">{equipoUsuario?.nombre} {equipoUsuario?.escudo}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-slate-500">Confianza de Directiva:</span>
-              <span className="font-bold text-rose-400 font-mono">{confianzaDirectiva}%</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-slate-500">Motivo:</span>
-              <span className="font-semibold text-rose-300">Pérdida crítica de apoyo institucional</span>
-            </div>
-          </div>
-
-          <button 
-            onClick={reiniciarPartida}
-            className="w-full py-3 bg-gradient-to-r from-rose-600 to-red-700 hover:from-rose-500 hover:to-red-650 text-white font-bold rounded-lg text-sm transition-all duration-200 uppercase tracking-wide shadow-lg hover:shadow-rose-900/30"
-          >
-            Volver a Intentar / Nueva Carrera
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // ==========================================
   // PANTALLA 1: SELECCIÓN DE EQUIPO (INICIO)
   // ==========================================
-  if (!equipoUsuarioId) {
+  if (!juegoIniciado) {
     // Conteos por liga para mostrar en las pestañas
     const conteoPorLiga = {
       todas: equipos.length,
@@ -285,7 +260,7 @@ const AppContent: React.FC = () => {
     };
 
     return (
-      <div className="min-h-screen bg-[#0b0f19] text-slate-100 flex flex-col items-center justify-center p-6 md:p-12 relative overflow-hidden">
+      <div className="min-h-screen bg-[#0b0f19] text-slate-100 flex flex-col items-center justify-start p-6 md:p-12 relative overflow-x-hidden overflow-y-auto">
         {/* Decoraciones de fondo premium */}
         <div className="absolute top-[-20%] left-[-10%] w-[600px] h-[600px] rounded-full bg-teal-500/5 blur-[130px] pointer-events-none"></div>
         <div className="absolute bottom-[-20%] right-[-10%] w-[600px] h-[600px] rounded-full bg-blue-500/5 blur-[130px] pointer-events-none"></div>
@@ -302,6 +277,23 @@ const AppContent: React.FC = () => {
             <p className="text-slate-400 text-sm md:text-base leading-relaxed">
               Tomá el control de una de las potencias del fútbol mundial. Gestioná tu plantel de estrellas, planificá tácticas y demostrá quién manda en Europa.
             </p>
+          </div>
+
+          {/* Configuración del Perfil de Mánager */}
+          <div className="w-full max-w-md bg-slate-900/40 backdrop-blur-md border border-slate-800/80 p-5 rounded-2xl mb-8 text-left shadow-lg">
+            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">
+              👔 Nombre del Director Técnico
+            </label>
+            <div className="relative">
+              <span className="absolute left-3.5 top-2.5 text-slate-500 text-sm">👔</span>
+              <input
+                type="text"
+                placeholder="Ingresá tu nombre de mánager..."
+                value={nombreManagerInput}
+                onChange={(e) => setNombreManagerInput(e.target.value)}
+                className="w-full pl-10 pr-4 py-2.5 bg-slate-950/80 border border-slate-850 rounded-xl text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500/20 transition-all font-semibold"
+              />
+            </div>
           </div>
 
           {/* Barra de Control (Buscador y Ordenamiento) */}
@@ -443,7 +435,7 @@ const AppContent: React.FC = () => {
                 return (
                   <div
                     key={equipo.id}
-                    onClick={() => seleccionarEquipo(equipo.id)}
+                    onClick={() => seleccionarEquipo(equipo.id, nombreManagerInput || 'DT Mánager')}
                     style={{
                       borderTop: `4px solid ${equipo.colorPrincipal}`,
                       boxShadow: isHovered ? `0 12px 30px -8px ${equipo.colorPrincipal}4D` : 'none',
@@ -551,6 +543,46 @@ const AppContent: React.FC = () => {
               </button>
             </div>
           )}
+        </div>
+      </div>
+    );
+  }
+
+  // ==========================================
+  // PANTALLA 2: CENTRO DE CARRERA (DESEMPLEADO)
+  // ==========================================
+  if (juegoIniciado && !equipoUsuarioId) {
+    return (
+      <div className="min-h-screen bg-[#0b0f19] text-slate-100 flex flex-col items-center justify-start p-6 md:p-12 relative overflow-x-hidden overflow-y-auto animate-fade-in">
+        {/* Decoraciones de fondo premium */}
+        <div className="absolute top-[-20%] left-[-10%] w-[600px] h-[600px] rounded-full bg-teal-500/5 blur-[130px] pointer-events-none"></div>
+        <div className="absolute bottom-[-20%] right-[-10%] w-[600px] h-[600px] rounded-full bg-indigo-500/5 blur-[130px] pointer-events-none"></div>
+
+        <div className="z-10 text-center max-w-6xl w-full flex flex-col items-center">
+          <div className="mb-6 max-w-2xl text-center">
+            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 mb-5 font-semibold text-xs tracking-wider uppercase shadow-[0_0_15px_rgba(245,158,11,0.1)]">
+              💼 Centro de Carrera del Mánager
+            </div>
+            <h1 className="text-4xl md:text-5xl font-black tracking-tight mb-2 bg-gradient-to-r from-amber-300 via-teal-400 to-indigo-400 bg-clip-text text-transparent">
+              OFICINA DE DESEMPLEO
+            </h1>
+            <p className="text-slate-400 text-sm">
+              Estás desempleado. Buscá vacantes disponibles en el mercado y postulá a nuevos desafíos.
+            </p>
+          </div>
+
+          <div className="w-full text-left">
+            <PerfilManagerView />
+          </div>
+
+          <div className="mt-8">
+            <button
+              onClick={reiniciarPartida}
+              className="px-6 py-2.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 text-slate-400 hover:text-rose-400 font-bold rounded-xl text-xs uppercase tracking-wider transition-all"
+            >
+              ⚠️ Abandonar Partida y Empezar de Nuevo
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -701,6 +733,16 @@ const AppContent: React.FC = () => {
             >
               <span>📊</span> Analítica
             </button>
+            <button
+              onClick={() => setVista('perfil')}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-semibold transition-all duration-150 ${
+                vista === 'perfil'
+                  ? 'bg-teal-600 text-white shadow-lg shadow-teal-700/20'
+                  : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/60'
+              }`}
+            >
+              <span>👔</span> Perfil Mánager
+            </button>
           </nav>
         </div>
 
@@ -782,6 +824,11 @@ const AppContent: React.FC = () => {
           {/* VISTA 6: COPA INTERNACIONAL (COPA DE CAMPEONES) */}
           {vista === 'copa' && (
             <CopaInternacionalView />
+          )}
+
+          {/* VISTA 7: PERFIL MÁNAGER & OFERTAS DE EMPLEO */}
+          {vista === 'perfil' && (
+            <PerfilManagerView />
           )}
  
         </div>
@@ -1011,68 +1058,110 @@ const AppContent: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* Counter-offer Interactive Panel */}
-                    <div className="bg-slate-950/40 rounded-xl p-4 border border-slate-800 space-y-3">
-                      <h4 className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider flex justify-between">
-                        <span>✍️ Contraofertar</span>
-                        <span className="text-slate-500 font-normal">Máx recomendado: +20%</span>
-                      </h4>
-
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-2 bg-slate-900 border border-slate-800 rounded-lg p-2 font-mono">
-                          <input
-                            type="number"
-                            value={contraofertaValor}
-                            onChange={(e) => setContraofertaValor(Math.max(0, parseInt(e.target.value) || 0))}
-                            className="bg-transparent text-white text-base font-bold outline-none flex-1 font-mono"
-                          />
-                          <span className="text-teal-400 text-xs font-bold font-mono">€</span>
+                    {ofertaRecibidaActiva?.esClausula ? (
+                      <div className="bg-rose-950/30 rounded-xl p-5 border border-rose-500/30 space-y-4">
+                        <div className="text-center space-y-1">
+                          <span className="text-rose-500 font-extrabold uppercase tracking-widest text-xs block">
+                            💥 Cláusula de Rescisión Ejecutada
+                          </span>
+                          <p className="text-slate-300 text-xs leading-relaxed">
+                            El club comprador ha depositado el total de la cláusula de rescisión de <strong>{formatearMoneda(ofertaRecibidaActiva.montoOfrecido)}</strong>. No puedes rechazar la oferta ni contraofertar. La decisión de continuar o marcharse recae únicamente en el jugador.
+                          </p>
                         </div>
-
-                        {/* visual help */}
-                        {ofertaRecibidaActiva && (
-                          <div className="flex justify-between items-center text-[10px] text-slate-500">
-                            <span>Sugerencia IA (+20%): <strong className="text-teal-500/90 font-mono">{formatearMoneda(Math.round(ofertaRecibidaActiva.montoOfrecido * 1.2))}</strong></span>
-                            <button
-                              onClick={() => setContraofertaValor(Math.round(ofertaRecibidaActiva.montoOfrecido * 1.2))}
-                              className="text-teal-400 hover:underline font-bold"
-                            >
-                              Ajustar Máximo
-                            </button>
-                          </div>
-                        )}
-
                         <button
-                          onClick={manejarContraoferta}
-                          className="w-full py-2.5 bg-gradient-to-r from-cyan-600 to-teal-600 hover:from-cyan-500 hover:to-teal-500 text-white font-bold rounded-lg text-xs uppercase tracking-wider transition-all active:scale-98 shadow-md"
+                          onClick={() => {
+                            const decideIrse = Math.random() < 0.60;
+                            if (decideIrse) {
+                              aceptarOfertaRecibida();
+                              setResultadoNegociacion({
+                                aceptado: true,
+                                mensaje: `🗣️ Representante: "${ofertaRecibidaActiva.jugadorNombre} ha llegado a un acuerdo con el ${ofertaRecibidaActiva.clubCompradorNombre}. Agradece tu tiempo en el club y te desea lo mejor en el futuro."\n\nEl jugador se marcha y sumas ${formatearMoneda(ofertaRecibidaActiva.montoOfrecido)} a tu presupuesto de fichajes.`
+                              });
+                            } else {
+                              rechazarOfertaRecibida();
+                              setResultadoNegociacion({
+                                aceptado: false,
+                                mensaje: `🗣️ Representante: "${ofertaRecibidaActiva.jugadorNombre} ha rechazado el contrato ofrecido por el ${ofertaRecibidaActiva.clubCompradorNombre} debido a que prefiere seguir desarrollándose bajo tu dirección."\n\nEl jugador ha decidido quedarse en tu club.`
+                              });
+                            }
+                          }}
+                          className="w-full py-3 bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white font-extrabold rounded-lg text-xs uppercase tracking-wider transition-all active:scale-95 shadow-lg shadow-red-900/20"
                         >
-                          Presentar Contraoferta
+                          Ver Decisión del Jugador ➜
                         </button>
                       </div>
-                    </div>
+                    ) : (
+                      /* Counter-offer Interactive Panel */
+                      <div className="bg-slate-950/40 rounded-xl p-4 border border-slate-800 space-y-3">
+                        <h4 className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider flex justify-between">
+                          <span>✍️ Contraofertar</span>
+                          <span className="text-slate-500 font-normal">Máx recomendado: +20%</span>
+                        </h4>
+
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2 bg-slate-900 border border-slate-800 rounded-lg p-2 font-mono">
+                            <input
+                              type="number"
+                              value={contraofertaValor}
+                              onChange={(e) => setContraofertaValor(Math.max(0, parseInt(e.target.value) || 0))}
+                              className="bg-transparent text-white text-base font-bold outline-none flex-1 font-mono"
+                            />
+                            <span className="text-teal-400 text-xs font-bold font-mono">€</span>
+                          </div>
+
+                          {/* visual help */}
+                          {ofertaRecibidaActiva && (
+                            <div className="flex justify-between items-center text-[10px] text-slate-500">
+                              <span>Sugerencia IA (+20%): <strong className="text-teal-500/90 font-mono">{formatearMoneda(Math.round(ofertaRecibidaActiva.montoOfrecido * 1.2))}</strong></span>
+                              <button
+                                onClick={() => setContraofertaValor(Math.round(ofertaRecibidaActiva.montoOfrecido * 1.2))}
+                                className="text-teal-400 hover:underline font-bold"
+                              >
+                                Ajustar Máximo
+                              </button>
+                            </div>
+                          )}
+
+                          <button
+                            onClick={manejarContraoferta}
+                            className="w-full py-2.5 bg-gradient-to-r from-cyan-600 to-teal-600 hover:from-cyan-500 hover:to-teal-500 text-white font-bold rounded-lg text-xs uppercase tracking-wider transition-all active:scale-98 shadow-md"
+                          >
+                            Presentar Contraoferta
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
 
                 {/* Footer Buttons: Accept and Reject */}
                 <div className="p-6 bg-slate-950 border-t border-slate-800 flex flex-col sm:flex-row gap-3 justify-between items-center">
-                  <div className="text-[10px] text-slate-500 text-center sm:text-left">
-                    ⚠️ Rechazar ofertas lucrativas de clubes grandes puede causar malestar y bajar la moral del jugador.
-                  </div>
-                  
-                  <div className="flex gap-3 w-full sm:w-auto">
-                    <button
-                      onClick={rechazarOfertaRecibida}
-                      className="flex-1 sm:flex-initial px-6 py-3 bg-slate-900 border border-slate-800 hover:border-rose-950 hover:bg-rose-950/20 text-slate-300 hover:text-rose-400 font-bold rounded-lg text-xs uppercase tracking-wider transition-all"
-                    >
-                      Rechazar Oferta
-                    </button>
-                    <button
-                      onClick={aceptarOfertaRecibida}
-                      className="flex-1 sm:flex-initial px-8 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold rounded-lg text-xs uppercase tracking-wider transition-all shadow-md shadow-teal-900/10"
-                    >
-                      Aceptar Oferta
-                    </button>
-                  </div>
+                  {ofertaRecibidaActiva?.esClausula ? (
+                    <div className="text-[10px] text-rose-400 text-center sm:text-left font-semibold">
+                      ⚠️ Cláusula Ejecutada: Las decisiones directivas están deshabilitadas para esta operación.
+                    </div>
+                  ) : (
+                    <>
+                      <div className="text-[10px] text-slate-500 text-center sm:text-left">
+                        ⚠️ Rechazar ofertas lucrativas de clubes grandes puede causar malestar y bajar la moral del jugador.
+                      </div>
+                      
+                      <div className="flex gap-3 w-full sm:w-auto">
+                        <button
+                          onClick={rechazarOfertaRecibida}
+                          className="flex-1 sm:flex-initial px-6 py-3 bg-slate-900 border border-slate-800 hover:border-rose-950 hover:bg-rose-950/20 text-slate-300 hover:text-rose-400 font-bold rounded-lg text-xs uppercase tracking-wider transition-all"
+                        >
+                          Rechazar Oferta
+                        </button>
+                        <button
+                          onClick={aceptarOfertaRecibida}
+                          className="flex-1 sm:flex-initial px-8 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold rounded-lg text-xs uppercase tracking-wider transition-all shadow-md shadow-teal-900/10"
+                        >
+                          Aceptar Oferta
+                        </button>
+                      </div>
+                    </>
+                  )}
                 </div>
               </>
             )}

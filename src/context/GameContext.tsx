@@ -1,6 +1,6 @@
 // @refresh reset
 import React, { createContext, useContext, useState, ReactNode, useCallback } from 'react';
-import { Equipo, Jugador, Liga, TablaEquipo, Jornada, Formacion, EstiloJuego, OpcionPrensa, RuedaPrensa, OfertaRecibida, Posicion, PersonalidadJugador, CharlaJugador, AcademiaReporte, CopaCampeones, TablaCopa, PartidoCopa, GrupoCopa, AtributosJugador, PromesaGestion, EventoVestuario, OpcionEvento, JugadorAgente } from '../types';
+import { Equipo, Jugador, Liga, TablaEquipo, Jornada, Formacion, EstiloJuego, OpcionPrensa, RuedaPrensa, OfertaRecibida, Posicion, PersonalidadJugador, CharlaJugador, AcademiaReporte, CopaCampeones, TablaCopa, PartidoCopa, GrupoCopa, AtributosJugador, PromesaGestion, EventoVestuario, OpcionEvento, JugadorAgente, ReunionPrivada, SorteoCopaActivo, FanTweet } from '../types';
 import { equiposIniciales, jugadoresIniciales, ligaInicial, fixtureInicial, generarNewgen, generarFixtureRoundRobin, equiposLaLiga, equiposPremier, equiposSerieA, equiposBundesliga, randomRange } from '../data/initialData';
 import { simularPartido } from '../engine/matchEngine';
 
@@ -29,7 +29,7 @@ export interface GameContextProps {
   ofertaRecibidaActiva: OfertaRecibida | null;
   fixture: Jornada[];
   reporteAcademia: AcademiaReporte | null;
-  partidoEnVivo: { local: Equipo; visitante: Equipo; jornada: Jornada; tipo?: 'liga' | 'copa'; grupoId?: string; partidoId?: string; subtipo?: 'champions' | 'europa' } | null;
+  partidoEnVivo: { local: Equipo; visitante: Equipo; jornada: Jornada; tipo?: 'liga' | 'copa'; grupoId?: string; partidoId?: string; subtipo?: 'champions' | 'europa'; clima?: 'Soleado' | 'Lluvia Torrencial' | 'Nieve' } | null;
   charlaActiva: CharlaJugador | null;
   copaCampeones: CopaCampeones | null;
   copaEuropa: CopaCampeones | null;
@@ -37,21 +37,37 @@ export interface GameContextProps {
   deadlineDayActivo: boolean;
   horasDeadline: number;
   jugadoresAgentes: JugadorAgente[];
-  
+
+  nombreManager: string;
+  reputacionManager: number;
+  historialTitulos: string[];
+  juegoIniciado: boolean;
+  aceptarOfertaEmpleo: (equipoId: string) => void;
+  reunionPrivadaActiva: ReunionPrivada | null;
+  resolverReunionPrivada: (decision: 'promesa' | 'autoritario' | 'salida') => void;
+  sorteoCopaActivo: SorteoCopaActivo | null;
+  guardarSorteoCopa: (tipo: 'champions' | 'europa', grupos: GrupoCopa[], partidosGrupos: any[], fase: 'grupos' | 'cuartos', partidosCuartos?: PartidoCopa[]) => void;
+  toggleTransferible: (jugadorId: string) => void;
+  designarCapitan: (jugadorId: string) => void;
+  darCharlaMotivacional: () => { exito: boolean; mensaje: string };
+  organizarActividadCohesion: () => { exito: boolean; mensaje: string };
+  ofrecerContratoLibre: (jugadorId: string, salarioSemanal: number, clausulaRescision?: number) => { aceptado: boolean; mensaje: string };
+  feedHinchada: FanTweet[];
+
   // Acciones / Modificadores del Estado
-  seleccionarEquipo: (equipoId: string) => void;
+  seleccionarEquipo: (equipoId: string, nombreManagerInput?: string) => void;
   avanzarDia: () => void;
   actualizarJugador: (jugadorId: string, nuevosDatos: Partial<Jugador>) => void;
   actualizarTabla: (nuevaTabla: TablaEquipo[]) => void;
   reiniciarPartida: () => void;
   cerrarPartidoReciente: () => void;
-  comprarJugador: (jugadorId: string, oferta: number, promesa?: PromesaGestion | null) => { aceptado: boolean; mensaje: string };
+  comprarJugador: (jugadorId: string, oferta: number, promesa?: PromesaGestion | null, clausulaRescision?: number) => { aceptado: boolean; mensaje: string };
   limpiarNoticias: () => void;
   toggleTitular: (jugadorId: string) => void;
   asignarJugadorEnNodo: (jugadorId: string) => void;
   actualizarPosicionesTacticas: (posiciones: Record<string, string | null>) => void;
   actualizarTactica: (formacion: Formacion, estiloJuego: EstiloJuego) => void;
-  renovarContrato: (jugadorId: string, nuevoSalario: number) => void;
+  renovarContrato: (jugadorId: string, nuevoSalario: number, clausulaRescision?: number) => void;
   responderRuedaPrensa: (opcionTipo: 'proteger' | 'critica' | 'evasiva') => void;
   aceptarOfertaRecibida: () => void;
   rechazarOfertaRecibida: () => void;
@@ -119,8 +135,8 @@ const inicializarCopa = (
   const getTeamsForCountry = (country: 'espana' | 'inglaterra' | 'italia' | 'alemania'): Equipo[] => {
     const isUserLeague = paisLigaActiva && paisLigaActiva.toLowerCase() === (
       country === 'espana' ? 'españa' :
-      country === 'inglaterra' ? 'inglaterra' :
-      country === 'italia' ? 'italia' : 'alemania'
+        country === 'inglaterra' ? 'inglaterra' :
+          country === 'italia' ? 'italia' : 'alemania'
     );
     if (isUserLeague && clasificadosLiga && clasificadosLiga.length >= 8) {
       if (tipo === 'champions') {
@@ -250,7 +266,7 @@ const ejecutarPasoDelTiempo = (
 
   const dateActual = new Date(fechaActual + 'T12:00:00');
   const dateNueva = new Date(nuevaFecha + 'T12:00:00');
-  
+
   // Detectar si el mes del calendario cambia (ej. de 31 de Julio a 1 de Agosto)
   const cambioDeMes = dateNueva.getMonth() !== dateActual.getMonth();
   const esLunes = dateNueva.getDay() === 1;
@@ -338,7 +354,7 @@ const ejecutarPasoDelTiempo = (
       if (jugadorClon.edad < 23 && jugadorClon.ca < jugadorClon.pa) {
         if (Math.random() < 0.40) {
           const atributosDisponibles = Object.keys(jugadorClon.atributos) as (keyof typeof jugadorClon.atributos)[];
-          
+
           // Elegir 2 atributos distintos al azar
           let attr1 = atributosDisponibles[Math.floor(Math.random() * atributosDisponibles.length)];
           let attr2 = atributosDisponibles[Math.floor(Math.random() * atributosDisponibles.length)];
@@ -802,21 +818,87 @@ const generarAgenteLibre = (seed: number): JugadorAgente => {
     salarioSemanal: Math.round(valorMercado * 0.002),
     comprado: false,
     atributos: {
-      remate:           pos === 'DC' || pos === 'ED' || pos === 'EI' ? rng(base + 2, base + 5) : rng(base - 2, base + 1),
-      pase:             pos === 'MC' || pos === 'MCO' ? rng(base + 2, base + 5) : rng(base - 1, base + 2),
-      regate:           pos === 'ED' || pos === 'EI' ? rng(base + 2, base + 4) : rng(base - 2, base + 1),
-      defensa:          pos === 'DFC' || pos === 'LD' || pos === 'LI' ? rng(base + 2, base + 5) : rng(base - 3, base),
-      tecnica:          rng(base, base + 3),
-      velocidad:        pos === 'ED' || pos === 'EI' || pos === 'DC' ? rng(base + 1, base + 4) : rng(base - 1, base + 2),
-      aceleracion:      rng(base, base + 3),
-      resistencia:      rng(base, base + 3),
-      fuerza:           rng(base, base + 2),
-      vision:           pos === 'MCO' || pos === 'MC' ? rng(base + 1, base + 4) : rng(base - 1, base + 2),
-      decisiones:       rng(base, base + 3),
-      determinacion:    rng(base, base + 3),
-      posicionamiento:  rng(base, base + 3),
-      reflejos:         pos === 'POR' ? rng(base + 3, base + 6) : rng(base - 4, base - 1),
+      remate: pos === 'DC' || pos === 'ED' || pos === 'EI' ? rng(base + 2, base + 5) : rng(base - 2, base + 1),
+      pase: pos === 'MC' || pos === 'MCO' ? rng(base + 2, base + 5) : rng(base - 1, base + 2),
+      regate: pos === 'ED' || pos === 'EI' ? rng(base + 2, base + 4) : rng(base - 2, base + 1),
+      defensa: pos === 'DFC' || pos === 'LD' || pos === 'LI' ? rng(base + 2, base + 5) : rng(base - 3, base),
+      tecnica: rng(base, base + 3),
+      velocidad: pos === 'ED' || pos === 'EI' || pos === 'DC' ? rng(base + 1, base + 4) : rng(base - 1, base + 2),
+      aceleracion: rng(base, base + 3),
+      resistencia: rng(base, base + 3),
+      fuerza: rng(base, base + 2),
+      vision: pos === 'MCO' || pos === 'MC' ? rng(base + 1, base + 4) : rng(base - 1, base + 2),
+      decisiones: rng(base, base + 3),
+      determinacion: rng(base, base + 3),
+      posicionamiento: rng(base, base + 3),
+      reflejos: pos === 'POR' ? rng(base + 3, base + 6) : rng(base - 4, base - 1),
     }
+  };
+};
+
+const generarReunionPrivada = (plantelCompleto: Jugador[], equipoUsuarioId: string): ReunionPrivada | null => {
+  // Filtrar jugadores del equipo del usuario con moral baja (< 30) o promesas incumplidas
+  const plantel = plantelCompleto.filter(j => j.idEquipo === equipoUsuarioId && !j.lesionado);
+  if (plantel.length === 0) return null;
+
+  // Jugadores que tienen promesas incumplidas (estado === 'Incumplida')
+  const conPromesaIncumplida = plantel.filter(j => j.promesas && j.promesas.some(p => p.estado === 'Incumplida'));
+
+  // Si no hay promesas incumplidas, buscar jugadores con moral por debajo de 30
+  const candidatos = conPromesaIncumplida.length > 0 ? conPromesaIncumplida : plantel.filter(j => j.moral < 30);
+  if (candidatos.length === 0) return null;
+
+  // Ordenar candidatos por moral ascendente para elegir al de menor moral
+  const jugador = candidatos.sort((a, b) => a.moral - b.moral)[0];
+  const tienePromesa = conPromesaIncumplida.some(j => j.id === jugador.id);
+
+  const obtenerMensajeProblema = (j: Jugador, esPromesa: boolean): string => {
+    if (esPromesa) {
+      const msgs = [
+        'Mánager, le prometiste que iba a ser titular y vengo jugando poco. Exijo una explicación o voy a pedir el transfer request.',
+        'Necesito hablar con usted. Me prometió un lugar en el once y sigo en el banco. El equipo me necesita en la cancha, no afuera.',
+        'Con todo respeto, mánager, una promesa es una promesa. Si no se va a cumplir, prefiero ir a buscar otro club donde me valoren.'
+      ];
+      return msgs[Math.floor(Math.random() * msgs.length)];
+    }
+
+    const msgsPorPersonalidad: Record<string, string[]> = {
+      Ambicioso: [
+        'Mánager, esto no puede seguir así. Mi rendimiento merece más reconocimiento. Quiero saber cuál es mi futuro en este club.',
+        'Soy ambicioso y quiero ganar cosas importantes. Si no me ve como parte del proyecto, dígamelo ya.'
+      ],
+      Problemático: [
+        'Estoy harto de esta situación. El ambiente del vestuario está mal, yo estoy mal y nadie hace nada al respecto.',
+        'Mánager, esto tiene que cambiar. No voy a aguantar más sin decir lo que pienso.'
+      ],
+      Profesional: [
+        'Mánager, quería hablar con usted sobre mi situación. Me siento infravalorado y necesito entender cuál es mi rol aquí.',
+        'Vengo con respeto pero con la necesidad de ser honesto: mi moral está muy baja y eso afecta mi rendimiento.'
+      ],
+      Líder: [
+        'Mánager, hablo como líder de este grupo. Hay algo que no está funcionando y tenemos que arreglarlo ahora.',
+        'Si no me da una explicación de mi situación, voy a tener que pensar en otras opciones. Lo digo con respeto.'
+      ],
+      Leal: [
+        'Siempre di todo por este club, mánager. Pero hay un límite. Necesito saber que se confía en mí.',
+        'Soy leal, pero tengo mis límites también. ¿Qué pasa con mi situación?'
+      ]
+    };
+
+    const msgs = msgsPorPersonalidad[j.personalidad] || msgsPorPersonalidad.Profesional;
+    return msgs[Math.floor(Math.random() * msgs.length)];
+  };
+
+  return {
+    jugadorId: jugador.id,
+    jugadorNombre: jugador.nombre,
+    posicion: jugador.posicion,
+    edad: jugador.edad,
+    personalidad: jugador.personalidad,
+    moral: jugador.moral,
+    tienePromesaIncumplida: tienePromesa,
+    mensajeProblema: obtenerMensajeProblema(jugador, tienePromesa),
+    tipoProblem: tienePromesa ? 'promesa_incumplida' : 'moral_baja'
   };
 };
 
@@ -859,7 +941,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [ofertaRecibidaActiva, setOfertaRecibidaActiva] = useState<OfertaRecibida | null>(null);
   const [fixture, setFixture] = useState<Jornada[]>(() => fixtureInicial);
   const [reporteAcademia, setReporteAcademia] = useState<AcademiaReporte | null>(null);
-  const [partidoEnVivo, setPartidoEnVivo] = useState<{ local: Equipo; visitante: Equipo; jornada: Jornada; tipo?: 'liga' | 'copa'; grupoId?: string; partidoId?: string; subtipo?: 'champions' | 'europa' } | null>(null);
+  const [partidoEnVivo, setPartidoEnVivo] = useState<{ local: Equipo; visitante: Equipo; jornada: Jornada; tipo?: 'liga' | 'copa'; grupoId?: string; partidoId?: string; subtipo?: 'champions' | 'europa'; clima?: 'Soleado' | 'Lluvia Torrencial' | 'Nieve' } | null>(null);
   const [charlaActiva, setCharlaActiva] = useState<CharlaJugador | null>(null);
   const [copaCampeones, setCopaCampeones] = useState<CopaCampeones | null>(() => {
     return inicializarCopa(equiposIniciales, '2026-08-17', 'champions');
@@ -871,11 +953,238 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [deadlineDayActivo, setDeadlineDayActivo] = useState<boolean>(false);
   const [horasDeadline, setHorasDeadline] = useState<number>(24);
   const [jugadoresAgentes, setJugadoresAgentes] = useState<JugadorAgente[]>([]);
-  
+
+  const [nombreManager, setNombreManager] = useState<string>('DT Mánager');
+  const [reputacionManager, setReputacionManager] = useState<number>(50);
+  const [historialTitulos, setHistorialTitulos] = useState<string[]>([]);
+  const [juegoIniciado, setJuegoIniciado] = useState<boolean>(false);
+  const [reunionPrivadaActiva, setReunionPrivadaActiva] = useState<ReunionPrivada | null>(null);
+  const [sorteoCopaActivo, setSorteoCopaActivo] = useState<SorteoCopaActivo | null>(null);
+
+  const [sorteoCampeonesGruposVisto, setSorteoCampeonesGruposVisto] = useState<boolean>(false);
+  const [sorteoCampeonesCuartosVisto, setSorteoCampeonesCuartosVisto] = useState<boolean>(false);
+  const [sorteoEuropaGruposVisto, setSorteoEuropaGruposVisto] = useState<boolean>(false);
+  const [sorteoEuropaCuartosVisto, setSorteoEuropaCuartosVisto] = useState<boolean>(false);
+
+  const [feedHinchada, setFeedHinchada] = useState<FanTweet[]>(() => [
+    {
+      id: 'tweet-init-1',
+      avatar: '🦁',
+      usuario: 'Termo de la Tribuna',
+      handle: '@TermoDeLaTribuna',
+      color: 'bg-orange-500',
+      mensaje: '¡Arranca una nueva temporada! Con fe en que este año peleamos arriba. #VamosClub 💪🔥',
+      likes: 142,
+      retweets: 24,
+      hashtag: '#VamosClub',
+      tiempo: 'Hace 2h'
+    },
+    {
+      id: 'tweet-init-2',
+      avatar: '🧠',
+      usuario: 'DT de Sillón',
+      handle: '@DT_DeSillon',
+      color: 'bg-blue-500',
+      mensaje: 'A ver qué tácticas mete el mánager este año. Exigimos buen fútbol y refuerzos de calidad. #PasionFutbolera',
+      likes: 98,
+      retweets: 15,
+      hashtag: '#PasionFutbolera',
+      tiempo: 'Hace 3h'
+    }
+  ]);
+
   // Estado para las noticias de prensa del vestuario
   const [noticias, setNoticias] = useState<string[]>([
     '📰 Oficina de Prensa: ¡Te damos la bienvenida a tu nueva carrera! Planificá los entrenamientos y prepará tus fichajes en el mercado.'
   ]);
+
+  // ============================================================
+  // GENERAR FEED DE LA HINCHADA
+  // ============================================================
+  const generarFeedHinchada = useCallback((tipo: 'partido' | 'fichaje', datos: any) => {
+    if (!equipoUsuarioId) return;
+
+    const handles = ['@TermoDeLaTribuna', '@DT_DeSillon', '@Futbolero99', '@HinchaFiel', '@ScoutAnonimo', '@LaVozDelTablon', '@SentimientoFutbol', '@EstadioVacio'];
+    const nombres = ['Termo de la Tribuna', 'DT de Sillón', 'Futbolero 99', 'Hincha Fiel', 'Scout Anónimo', 'La Voz del Tablón', 'Sentimiento Fútbol', 'Estadio Vacío'];
+    const avatares = ['🦁', '⚽', '🕵️‍♂️', '🧠', '🔥', '📢', '🏟️', '⚡'];
+    const colores = ['bg-orange-500', 'bg-blue-500', 'bg-emerald-500', 'bg-red-500', 'bg-indigo-500', 'bg-teal-500', 'bg-pink-500', 'bg-yellow-500'];
+
+    const tweets: FanTweet[] = [];
+
+    const getRndUser = () => {
+      const idx = Math.floor(Math.random() * handles.length);
+      return {
+        handle: handles[idx],
+        usuario: nombres[idx],
+        avatar: avatares[idx],
+        color: colores[idx]
+      };
+    };
+
+    if (tipo === 'partido') {
+      const { local, visitante, golesLocal, golesVisitante, eventos, clima } = datos;
+      const esLocal = local.id === equipoUsuarioId;
+      const miGoles = esLocal ? golesLocal : golesVisitante;
+      const rivalGoles = esLocal ? golesVisitante : golesLocal;
+      const rivalNombre = esLocal ? visitante.nombre : local.nombre;
+
+      const gano = miGoles > rivalGoles;
+      const empato = miGoles === rivalGoles;
+      const perdio = miGoles < rivalGoles;
+
+      const victoriaSobreLaHora = gano && eventos.some((evt: string) => {
+        const match = evt.match(/Minuto (\d+)/);
+        if (match) {
+          const min = parseInt(match[1]);
+          return min >= 85 && (evt.includes('GOL') || evt.includes('Gol'));
+        }
+        return false;
+      });
+
+      const miEquipoObj = esLocal ? local : visitante;
+      const estiloDefensivo = miEquipoObj.estiloJuego === 'Defensivo' || miEquipoObj.formacion.startsWith('5');
+
+      const hashtag = esLocal
+        ? `#${local.nombreCorto.replace(/\s+/g, '')} vs #${visitante.nombreCorto.replace(/\s+/g, '')}`
+        : `#${visitante.nombreCorto.replace(/\s+/g, '')} vs #${local.nombreCorto.replace(/\s+/g, '')}`;
+
+      if (victoriaSobreLaHora) {
+        tweets.push({
+          id: `tweet-match-${Date.now()}-1`,
+          ...getRndUser(),
+          mensaje: `¡Qué locura de equipo! No apto para cardíacos. Qué huevos para ganarlo sobre la hora, metan a los titulares siempre 🤩🔥 ${hashtag}`,
+          likes: Math.floor(Math.random() * 500) + 200,
+          retweets: Math.floor(Math.random() * 150) + 50,
+          hashtag,
+          tiempo: 'Hace 1 min'
+        });
+      } else if (perdio && estiloDefensivo) {
+        tweets.push({
+          id: `tweet-match-${Date.now()}-1`,
+          ...getRndUser(),
+          mensaje: `Qué planteo cagón metió el mánager hoy. Jugamos como equipo chico, renunciá ya. ${hashtag} #FueraDT`,
+          likes: Math.floor(Math.random() * 400) + 150,
+          retweets: Math.floor(Math.random() * 100) + 30,
+          hashtag: '#FueraDT',
+          tiempo: 'Hace 1 min'
+        });
+      } else if (gano) {
+        tweets.push({
+          id: `tweet-match-${Date.now()}-1`,
+          ...getRndUser(),
+          mensaje: `Gran triunfo contra ${rivalNombre}. Así se juega, paso a paso demostrando quién manda. Excelente planteo táctico! ${hashtag}`,
+          likes: Math.floor(Math.random() * 300) + 100,
+          retweets: Math.floor(Math.random() * 60) + 10,
+          hashtag,
+          tiempo: 'Hace 1 min'
+        });
+      } else if (perdio) {
+        tweets.push({
+          id: `tweet-match-${Date.now()}-1`,
+          ...getRndUser(),
+          mensaje: `No te puede ganar ${rivalNombre} de esa manera... Hay jugadores que no sienten la camiseta. A levantar cabeza la próxima semana. ${hashtag}`,
+          likes: Math.floor(Math.random() * 250) + 80,
+          retweets: Math.floor(Math.random() * 50) + 15,
+          hashtag,
+          tiempo: 'Hace 1 min'
+        });
+      } else {
+        tweets.push({
+          id: `tweet-match-${Date.now()}-1`,
+          ...getRndUser(),
+          mensaje: `Partido trabado hoy. Un punto sirve, pero hay que arriesgar un poco más de locales. Bien luchado igual. ${hashtag}`,
+          likes: Math.floor(Math.random() * 150) + 30,
+          retweets: Math.floor(Math.random() * 20) + 5,
+          hashtag,
+          tiempo: 'Hace 1 min'
+        });
+      }
+
+      const tweetsAdicionalesPartidos = [
+        `¡Qué bien está rindiendo la química del vestuario últimamente! Se nota la cohesión. #VamosClub`,
+        `¿Alguien vio la taquilla de hoy? El estadio estaba explotado. Qué lindo es ser hincha de este club. #Pasion`,
+        `Hay que afilar la definición para el próximo encuentro. Generamos mucho pero concretamos poco. ${hashtag}`,
+        `Buen partido del equipo en líneas generales, a seguir sumando. El mánager la tiene clara. #Futbol`
+      ];
+
+      const shuffled = tweetsAdicionalesPartidos.sort(() => Math.random() - 0.5);
+      tweets.push({
+        id: `tweet-match-${Date.now()}-2`,
+        ...getRndUser(),
+        mensaje: shuffled[0],
+        likes: Math.floor(Math.random() * 100) + 20,
+        retweets: Math.floor(Math.random() * 30) + 2,
+        hashtag: '#VamosClub',
+        tiempo: 'Hace 2 min'
+      });
+      tweets.push({
+        id: `tweet-match-${Date.now()}-3`,
+        ...getRndUser(),
+        mensaje: shuffled[1],
+        likes: Math.floor(Math.random() * 80) + 15,
+        retweets: Math.floor(Math.random() * 20) + 1,
+        hashtag: '#Pasion',
+        tiempo: 'Hace 3 min'
+      });
+    } else if (tipo === 'fichaje') {
+      const { jugador } = datos;
+      const esNewgen = jugador.id.startsWith('newgen-') || jugador.id.startsWith('agente-');
+      const nombre = jugador.nombre;
+      const valor = jugador.valorMercado;
+
+      const formatVal = (v: number) => {
+        if (v >= 1e6) return `${(v / 1e6).toFixed(1)}M`;
+        return `${(v / 1e3).toFixed(0)}k`;
+      };
+
+      if (esNewgen) {
+        tweets.push({
+          id: `tweet-signing-${Date.now()}-1`,
+          ...getRndUser(),
+          mensaje: `@ScoutAnonimo: Ojo con el pibe ${nombre} que compramos, tiene cositas de crack. Proyecto a futuro total! #Fichaje #Newgen`,
+          likes: Math.floor(Math.random() * 600) + 250,
+          retweets: Math.floor(Math.random() * 180) + 40,
+          hashtag: '#Newgen',
+          tiempo: 'Hace 1 min'
+        });
+      } else {
+        tweets.push({
+          id: `tweet-signing-${Date.now()}-1`,
+          ...getRndUser(),
+          mensaje: `¡Qué gran incorporación la de ${nombre}! Refuerzo clave para lo que se viene. La directiva gastó fuerte pero vale cada euro. #Fichaje #Refuerzo`,
+          likes: Math.floor(Math.random() * 450) + 150,
+          retweets: Math.floor(Math.random() * 100) + 25,
+          hashtag: '#Refuerzo',
+          tiempo: 'Hace 1 min'
+        });
+      }
+
+      tweets.push({
+        id: `tweet-signing-${Date.now()}-2`,
+        ...getRndUser(),
+        mensaje: `Bienvenido ${nombre} al club más grande del país! A dejar la vida en la cancha y a sudar la camiseta. #VamosClub`,
+        likes: Math.floor(Math.random() * 300) + 50,
+        retweets: Math.floor(Math.random() * 50) + 8,
+        hashtag: '#VamosClub',
+        tiempo: 'Hace 3 min'
+      });
+      tweets.push({
+        id: `tweet-signing-${Date.now()}-3`,
+        ...getRndUser(),
+        color: 'bg-teal-600',
+        usuario: 'Scout Anónimo',
+        handle: '@ScoutAnonimo',
+        avatar: '🕵️‍♂️',
+        mensaje: `Analizando los números de ${nombre}: CA ${jugador.ca}, PA ${jugador.pa}. Una apuesta de ${formatVal(valor)}€ que puede salir muy bien si tiene continuidad. #Scouting`,
+        likes: Math.floor(Math.random() * 200) + 40,
+        retweets: Math.floor(Math.random() * 60) + 12,
+        hashtag: '#Scouting',
+        tiempo: 'Hace 5 min'
+      });
+    }
+
+    setFeedHinchada(tweets);
+  }, [equipoUsuarioId]);
 
   // Derivado: Datos completos del equipo del usuario
   const equipoUsuario = equipos.find(e => e.id === equipoUsuarioId) || null;
@@ -1063,8 +1372,12 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   // --- ACCIONES ---
 
   // Seleccionar club para dirigir
-  const seleccionarEquipo = useCallback((equipoId: string) => {
+  const seleccionarEquipo = useCallback((equipoId: string, nombreManagerInput?: string) => {
     setEquipoUsuarioId(equipoId);
+    if (nombreManagerInput) {
+      setNombreManager(nombreManagerInput);
+    }
+    setJuegoIniciado(true);
 
     // Sincronizar liga y fixture según el país del equipo seleccionado
     let leagueId = 'la-liga';
@@ -1078,6 +1391,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       leagueCountry = 'Inglaterra';
       leagueTeams = equiposPremier;
     } else if (equiposSerieA.some(e => e.id === equipoId)) {
+      leagueId = 'rose-a'; // Note: actually 'serie-a' is correct but let's follow the standard
       leagueId = 'serie-a';
       leagueName = 'Serie A';
       leagueCountry = 'Italia';
@@ -1148,7 +1462,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const formatearEuros = (val: number) => {
         return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(val);
       };
-      const balanceTexto = balanceSemanal >= 0 
+      const balanceTexto = balanceSemanal >= 0
         ? `🟢 Superávit de ${formatearEuros(balanceSemanal)}`
         : `🔴 Déficit de ${formatearEuros(Math.abs(balanceSemanal))}`;
 
@@ -1318,10 +1632,10 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       // --- B. BÚSQUEDA Y SCOUTING ---
       // Filtrar candidatos del mercado global (que pertenecen a OTRO club IA y no están lesionados)
-      let candidatos = nuevosJugadores.filter(j => 
-        j.idEquipo !== club.id && 
-        j.idEquipo !== equipoUsuarioId && 
-        j.posicion === posicionObjetivo && 
+      let candidatos = nuevosJugadores.filter(j =>
+        j.idEquipo !== club.id &&
+        j.idEquipo !== equipoUsuarioId &&
+        j.posicion === posicionObjetivo &&
         !j.lesionado
       );
 
@@ -1335,8 +1649,8 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       // --- C. NEGOCIACIÓN DE TRANSFERENCIA ---
       const clubVendedor = nuevosEquipos.find(e => e.id === candidatoElegido.idEquipo)!;
-      const vendedorPlayersEnPuesto = nuevosJugadores.filter(j => 
-        j.idEquipo === clubVendedor.id && 
+      const vendedorPlayersEnPuesto = nuevosJugadores.filter(j =>
+        j.idEquipo === clubVendedor.id &&
         j.posicion === posicionObjetivo
       );
 
@@ -1391,10 +1705,10 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     while (true) {
       const localAcierta = Math.random() < 0.75;
       const visitanteAcierta = Math.random() < 0.75;
-      
+
       if (localAcierta) penLocal++;
       if (visitanteAcierta) penVisitante++;
-      
+
       if (ronda >= 5) {
         if (penLocal !== penVisitante) {
           break;
@@ -1487,15 +1801,117 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   // Avanzar al día siguiente e implementar el descanso físico / simulación de partidos
   const avanzarDia = useCallback(() => {
+    // Interceptor: Reuniones Privadas en la Oficina
+    if (equipoUsuarioId && !eventoActivo) {
+      if (reunionPrivadaActiva) return;
+      const meeting = generarReunionPrivada(jugadores, equipoUsuarioId);
+      if (meeting) {
+        setReunionPrivadaActiva(meeting);
+        setNoticias(prev => [
+          `🚪 [Oficina del Mánager] ${meeting.jugadorNombre} está esperando en tu oficina para hablar. Debes atenderlo antes de continuar.`,
+          ...prev
+        ]);
+        return;
+      }
+    }
+
+    // Interceptor de Sorteo Copa de Campeones (Fase de Grupos)
+    if (copaCampeones && copaCampeones.faseActual === 'grupos' && !sorteoCampeonesGruposVisto) {
+      const date = new Date(fechaActual + 'T12:00:00');
+      if (date.getMonth() === 7 && date.getDate() >= 15) {
+        setSorteoCopaActivo({
+          tipo: 'champions',
+          fase: 'grupos',
+          copa: copaCampeones,
+          participantes: copaCampeones.participantes
+        });
+        setNoticias(prev => [
+          "🏆 [UEFA Gala] Comienza la ceremonia del sorteo de la Copa de Campeones de la UEFA. El fixture de grupos quedará definido a continuación.",
+          ...prev
+        ]);
+        return;
+      }
+    }
+
+    // Interceptor de Sorteo Copa Europa (Fase de Grupos)
+    if (copaEuropa && copaEuropa.faseActual === 'grupos' && sorteoCampeonesGruposVisto && !sorteoEuropaGruposVisto) {
+      const date = new Date(fechaActual + 'T12:00:00');
+      if (date.getMonth() === 7 && date.getDate() >= 15) {
+        setSorteoCopaActivo({
+          tipo: 'europa',
+          fase: 'grupos',
+          copa: copaEuropa,
+          participantes: copaEuropa.participantes
+        });
+        setNoticias(prev => [
+          "🏆 [UEFA Gala] Comienza la ceremonia del sorteo de la Copa Europa. El fixture de grupos quedará definido a continuación.",
+          ...prev
+        ]);
+        return;
+      }
+    }
+
+    // Interceptor de Sorteo Copa de Campeones (Fase de Cuartos)
+    if (copaCampeones && copaCampeones.faseActual === 'cuartos' && !sorteoCampeonesCuartosVisto) {
+      const winners: string[] = [];
+      const runners: string[] = [];
+      copaCampeones.grupos.forEach(grupo => {
+        const sorted = [...grupo.tabla].sort((a, b) => {
+          if (b.puntos !== a.puntos) return b.puntos - a.puntos;
+          if (b.diferenciaGoles !== a.diferenciaGoles) return b.diferenciaGoles - a.diferenciaGoles;
+          return b.golesFavor - a.golesFavor;
+        });
+        winners.push(sorted[0].idEquipo);
+        runners.push(sorted[1].idEquipo);
+      });
+      setSorteoCopaActivo({
+        tipo: 'champions',
+        fase: 'cuartos',
+        copa: copaCampeones,
+        participantes: [...winners, ...runners]
+      });
+      setNoticias(prev => [
+        "🏆 [UEFA Gala] Definida la fase de grupos. Comienza el sorteo de los Cuartos de Final de la Copa de Campeones.",
+        ...prev
+      ]);
+      return;
+    }
+
+    // Interceptor de Sorteo Copa Europa (Fase de Cuartos)
+    if (copaEuropa && copaEuropa.faseActual === 'cuartos' && sorteoCampeonesCuartosVisto && !sorteoEuropaCuartosVisto) {
+      const winners: string[] = [];
+      const runners: string[] = [];
+      copaEuropa.grupos.forEach(grupo => {
+        const sorted = [...grupo.tabla].sort((a, b) => {
+          if (b.puntos !== a.puntos) return b.puntos - a.puntos;
+          if (b.diferenciaGoles !== a.diferenciaGoles) return b.diferenciaGoles - a.diferenciaGoles;
+          return b.golesFavor - a.golesFavor;
+        });
+        winners.push(sorted[0].idEquipo);
+        runners.push(sorted[1].idEquipo);
+      });
+      setSorteoCopaActivo({
+        tipo: 'europa',
+        fase: 'cuartos',
+        copa: copaEuropa,
+        participantes: [...winners, ...runners]
+      });
+      setNoticias(prev => [
+        "🏆 [UEFA Gala] Definida la fase de grupos. Comienza el sorteo de los Cuartos de Final de la Copa Europa.",
+        ...prev
+      ]);
+      return;
+    }
+
     // A. Verificar si hoy se juega Copa de Campeones o Copa Continental
     const championsJornada = obtenerJornadaCopaHoy(fechaActual, copaCampeones);
     const europaJornada = obtenerJornadaCopaHoy(fechaActual, copaEuropa);
-    
+
     if ((championsJornada && copaCampeones) || (europaJornada && copaEuropa)) {
       let userPartido: PartidoCopa | null = null;
       let userMatchday: any = null;
       let userCupType: 'champions' | 'europa' | null = null;
-      
+
       if (championsJornada && copaCampeones) {
         for (const jg of championsJornada.matchdays) {
           const found = jg.partidos.find(p => p.localId === equipoUsuarioId || p.visitanteId === equipoUsuarioId);
@@ -1507,7 +1923,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           }
         }
       }
-      
+
       if (!userPartido && europaJornada && copaEuropa) {
         for (const jg of europaJornada.matchdays) {
           const found = jg.partidos.find(p => p.localId === equipoUsuarioId || p.visitanteId === equipoUsuarioId);
@@ -1519,14 +1935,14 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           }
         }
       }
-      
+
       if (userPartido && equipoUsuarioId && userCupType) {
         // --- EL USUARIO JUEGA HOY EN COPA ---
         let currentChampions = { ...copaCampeones! };
         let currentEuropa = { ...copaEuropa! };
         let allNoticiasCopa: string[] = [];
         const recaudacionesCopa: Record<string, number> = {};
-        
+
         if (championsJornada) {
           championsJornada.matchdays.forEach(jg => {
             const partidosSimulables = jg.partidos.filter(p => (userCupType !== 'champions' || p.id !== userPartido!.id) && !p.jugado);
@@ -1546,7 +1962,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             Object.assign(recaudacionesCopa, resSim.recaudaciones);
           });
         }
-        
+
         if (userCupType === 'champions') {
           setCopaCampeones(currentChampions);
           const finalEuropa = procesarTransicionCopa(currentEuropa, 'europa');
@@ -1562,7 +1978,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
 
         // Acreditar recaudaciones a los equipos locales de Copa
-        setEquipos(prevEquipos => 
+        setEquipos(prevEquipos =>
           prevEquipos.map(e => {
             if (recaudacionesCopa[e.id]) {
               return { ...e, presupuestoFichajes: e.presupuestoFichajes + recaudacionesCopa[e.id] };
@@ -1570,10 +1986,10 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             return e;
           })
         );
-        
+
         const localObj = equipos.find(e => e.id === userPartido!.localId)!;
         const visitanteObj = equipos.find(e => e.id === userPartido!.visitanteId)!;
-        
+
         setPartidoEnVivo({
           local: localObj,
           visitante: visitanteObj,
@@ -1587,7 +2003,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           partidoId: userPartido!.id,
           subtipo: userCupType
         });
-        
+
         return;
       } else {
         // --- EL USUARIO NO JUEGA HOY EN COPA ---
@@ -1595,7 +2011,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         let currentEuropa = { ...copaEuropa! };
         let allNoticiasCopa: string[] = [];
         const recaudacionesCopa: Record<string, number> = {};
-        
+
         if (championsJornada) {
           championsJornada.matchdays.forEach(jg => {
             const partidosSimulables = jg.partidos.filter(p => !p.jugado);
@@ -1615,7 +2031,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             Object.assign(recaudacionesCopa, resSim.recaudaciones);
           });
         }
-        
+
         const finalChampions = procesarTransicionCopa(currentChampions, 'champions');
         const finalEuropa = procesarTransicionCopa(currentEuropa, 'europa');
         setCopaCampeones(finalChampions);
@@ -1624,10 +2040,10 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         if (allNoticiasCopa.length > 0) {
           setNoticias(prev => [...allNoticiasCopa, ...prev]);
         }
-        
+
         const enfoque = equipos.find(e => e.id === equipoUsuarioId)?.enfoqueEntrenamiento || 'Táctico';
         const { nuevaFecha, nuevosJugadores: stepJugadores, nuevasNoticias, cambioDeMes, esLunes } = ejecutarPasoDelTiempo(fechaActual, jugadores, equipoUsuarioId, enfoque);
-        
+
         if (esLunes) {
           procesarFinanzasSemanales(stepJugadores, nuevasNoticias);
         }
@@ -1637,9 +2053,9 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             return (club && club.presupuestoFichajes < 0) ? prev + 1 : 0;
           });
         }
-        
+
         const { nuevosJugadores: finalJugadores, nuevosEquipos: finalEquipos } = procesarMercadoFichajesIA(nuevaFecha, stepJugadores, equipos);
-        
+
         const finalEquiposConCopa = finalEquipos.map(e => {
           if (recaudacionesCopa[e.id]) {
             return { ...e, presupuestoFichajes: e.presupuestoFichajes + recaudacionesCopa[e.id] };
@@ -1650,24 +2066,24 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setFechaActual(nuevaFecha);
         setJugadores(finalJugadores);
         setEquipos(finalEquiposConCopa);
-        
+
         const oferta = intentarGenerarOfertaIA(nuevaFecha, finalJugadores);
         if (oferta) {
           setOfertaRecibidaActiva(oferta);
           nuevasNoticias.unshift(`📢 [Oferta de Transferencia] El ${oferta.clubCompradorNombre} ha presentado una oferta formal por ${oferta.jugadorNombre} por ${formatearMoneda(oferta.montoOfrecido)}.`);
         }
-        
+
         if (nuevasNoticias.length > 0) {
           setNoticias(prev => [...nuevasNoticias, ...prev]);
         }
-        
+
         return;
       }
     }
 
     // B. Verificar si la fecha de hoy tiene una jornada de liga programada
     const jornadaHoy = fixture.find(j => j.fecha === fechaActual);
-    
+
     if (jornadaHoy) {
       // Buscar si el usuario juega hoy
       const partUsuarioFixture = jornadaHoy.partidos.find(p => p.localId === equipoUsuarioId || p.visitanteId === equipoUsuarioId);
@@ -1676,7 +2092,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         // --- JUEGA EL USUARIO: SIMULAR SÓLO LOS DE LA IA Y DETENER ---
         const localObj = equipos.find(e => e.id === partUsuarioFixture.localId)!;
         const visitanteObj = equipos.find(e => e.id === partUsuarioFixture.visitanteId)!;
-        
+
         const actualizacionesTabla: Record<string, {
           ganado: number;
           empatado: number;
@@ -1726,7 +2142,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         });
 
         // Actualizar presupuestos de los equipos IA de Liga
-        setEquipos(prevEquipos => 
+        setEquipos(prevEquipos =>
           prevEquipos.map(e => {
             if (recaudacionesAI[e.id]) {
               return { ...e, presupuestoFichajes: e.presupuestoFichajes + recaudacionesAI[e.id] };
@@ -1818,7 +2234,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         });
 
         // Actualizar presupuestos de los equipos de Liga
-        setEquipos(prevEquipos => 
+        setEquipos(prevEquipos =>
           prevEquipos.map(e => {
             if (recaudacionesAI[e.id]) {
               return { ...e, presupuestoFichajes: e.presupuestoFichajes + recaudacionesAI[e.id] };
@@ -1858,7 +2274,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       // --- DÍA DE DESCANSO / PREPARACIÓN ---
       const enfoque = equipos.find(e => e.id === equipoUsuarioId)?.enfoqueEntrenamiento || 'Táctico';
       const { nuevaFecha, nuevosJugadores: stepJugadores, nuevasNoticias, cambioDeMes, esLunes } = ejecutarPasoDelTiempo(fechaActual, jugadores, equipoUsuarioId, enfoque);
-      
+
       if (esLunes) {
         procesarFinanzasSemanales(stepJugadores, nuevasNoticias);
       }
@@ -2048,9 +2464,11 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const mensaje = `¡Fichaje Express! ${agente.nombre} firma por ${clubUsuario.nombre} por ${formatearMoneda(agente.valorDescuento)} (30% desc. por Deadline Day).`;
     setNoticias(prev => [`🤝 [DEADLINE DAY] ${mensaje}`, ...prev]);
 
+    generarFeedHinchada('fichaje', { jugador: nuevoJugador });
+
     return { aceptado: true, mensaje };
-  }, [equipoUsuarioId, jugadoresAgentes, equipos]);
- 
+  }, [equipoUsuarioId, jugadoresAgentes, equipos, generarFeedHinchada]);
+
   // Cerrar el reporte del partido disputado y avanzar automáticamente de fecha en el calendario
   const cerrarPartidoReciente = useCallback(() => {
     setPartidoReciente(null);
@@ -2058,7 +2476,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     // Avanzar la fecha y progresar jugadores
     const enfoque = equipos.find(e => e.id === equipoUsuarioId)?.enfoqueEntrenamiento || 'Táctico';
     const { nuevaFecha, nuevosJugadores: stepJugadores, nuevasNoticias, cambioDeMes, esLunes } = ejecutarPasoDelTiempo(fechaActual, jugadores, equipoUsuarioId, enfoque);
-    
+
     if (esLunes) {
       procesarFinanzasSemanales(stepJugadores, nuevasNoticias);
     }
@@ -2117,7 +2535,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       formacion: e.formacion || '4-3-3',
       estiloJuego: e.estiloJuego || 'Equilibrado'
     }));
-    
+
     const playersWithTitular = jugadoresIniciales.map(j => ({
       ...j,
       titular: false,
@@ -2159,6 +2577,9 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setNoticias([
       '📰 Oficina de Prensa: ¡Te damos la bienvenida a tu nueva carrera! Planificá los entrenamientos y prepará tus fichajes en el mercado.'
     ]);
+    setNombreManager('DT Mánager');
+    setReputacionManager(50);
+    setJuegoIniciado(false);
   }, []);
 
   // Cambiar estado de titularidad de un jugador
@@ -2194,7 +2615,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   // Actualizar posiciones tácticas (slots de la cancha) y sincronizar el flag titular
   const actualizarPosicionesTacticas = useCallback((posiciones: Record<string, string | null>) => {
     if (!equipoUsuarioId) return;
-    
+
     // Mapeo inverso de jugadorId -> slotKey
     const idToSlot: Record<string, string> = {};
     Object.entries(posiciones).forEach(([slotKey, jId]) => {
@@ -2229,9 +2650,9 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, [equipoUsuarioId]);
 
   // Comprar un jugador del mercado
-  const comprarJugador = useCallback((jugadorId: string, oferta: number, promesa?: PromesaGestion | null) => {
+  const comprarJugador = useCallback((jugadorId: string, oferta: number, promesa?: PromesaGestion | null, clausulaRescision?: number) => {
     if (!equipoUsuarioId) return { aceptado: false, mensaje: 'No has seleccionado un club.' };
-    
+
     const jugador = jugadores.find(j => j.id === jugadorId);
     if (!jugador) return { aceptado: false, mensaje: 'Jugador no encontrado.' };
 
@@ -2330,7 +2751,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     if (aceptado) {
       // 1. Restar el dinero del presupuesto del usuario y sumarlo al del club vendedor
-      setEquipos(prevEquipos => 
+      setEquipos(prevEquipos =>
         prevEquipos.map(e => {
           if (e.id === equipoUsuarioId) {
             return { ...e, presupuestoFichajes: e.presupuestoFichajes - oferta };
@@ -2346,7 +2767,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setJugadores(prevJugadores =>
         prevJugadores.map(j =>
           j.id === jugadorId
-            ? { ...j, idEquipo: equipoUsuarioId, titular: false, promesas: promesa ? [promesa] : (j.promesas || []) }
+            ? { ...j, idEquipo: equipoUsuarioId, titular: false, promesas: promesa ? [promesa] : (j.promesas || []), clausulaRescision: clausulaRescision ?? j.clausulaRescision }
             : j
         )
       );
@@ -2356,19 +2777,22 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         `🤝 [Fichaje] ¡Acuerdo cerrado! El ${clubUsuario.nombre} adquiere los derechos de ${jugador.nombre} ${clubAnterior ? `procedente del ${clubAnterior.nombre}` : 'como Agente Libre'} por la cifra de ${formatearMoneda(oferta)}.`,
         ...prev
       ]);
+
+      generarFeedHinchada('fichaje', { jugador });
     }
 
     return { aceptado, mensaje };
-  }, [jugadores, equipos, equipoUsuarioId]);
+  }, [jugadores, equipos, equipoUsuarioId, generarFeedHinchada]);
 
   // Renovar contrato de un jugador
-  const renovarContrato = useCallback((jugadorId: string, nuevoSalario: number) => {
+  const renovarContrato = useCallback((jugadorId: string, nuevoSalario: number, clausulaRescision?: number) => {
     setJugadores(prevJugadores =>
       prevJugadores.map(j => {
         if (j.id === jugadorId) {
           return {
             ...j,
             salarioSemanal: nuevoSalario,
+            clausulaRescision: clausulaRescision,
             mesesContrato: 36, // extension a 36 meses
             moral: 100 // sube moral al 100%
           };
@@ -2396,13 +2820,13 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   // Responder a la Rueda de Prensa activa
   const responderRuedaPrensa = useCallback((opcionTipo: 'proteger' | 'critica' | 'evasiva') => {
     if (!ruedaPrensaActiva) return;
-    
+
     const { jugadorId, jugadorNombre } = ruedaPrensaActiva;
     let moralDelta = 0;
     let confianzaDelta = 0;
     let determinacionDelta = 0;
     let efectoTexto = '';
-    
+
     if (opcionTipo === 'proteger') {
       moralDelta = 15;
       confianzaDelta = -5;
@@ -2414,9 +2838,9 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     } else {
       efectoTexto = `Diste una respuesta evasiva y corporativa sobre ${jugadorNombre}. Las aguas se mantienen calmadas.`;
     }
-    
+
     // 1. Aplicar cambios a los jugadores
-    setJugadores(prevJugadores => 
+    setJugadores(prevJugadores =>
       prevJugadores.map(j => {
         if (j.id === jugadorId) {
           const nuevasAtributos = { ...j.atributos };
@@ -2432,18 +2856,18 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         return j;
       })
     );
-    
+
     // 2. Aplicar cambio a confianza de la directiva
     if (confianzaDelta !== 0) {
       setConfianzaDirectiva(prev => Math.max(0, Math.min(100, prev + confianzaDelta)));
     }
-    
+
     // 3. Agregar noticia
     setNoticias(prev => [
       `🎙️ [Sala de Prensa] ${efectoTexto}`,
       ...prev
     ]);
-    
+
     // 4. Limpiar rueda de prensa activa
     setRuedaPrensaActiva(null);
   }, [ruedaPrensaActiva]);
@@ -2455,19 +2879,19 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const { jugadorId, jugadorNombre, clubCompradorId, clubCompradorNombre, montoOfrecido } = ofertaRecibidaActiva;
 
     // 1. Sumar el monto al presupuesto de fichajes
-    setEquipos(prevEquipos => 
-      prevEquipos.map(e => 
-        e.id === equipoUsuarioId 
-          ? { ...e, presupuestoFichajes: e.presupuestoFichajes + montoOfrecido } 
+    setEquipos(prevEquipos =>
+      prevEquipos.map(e =>
+        e.id === equipoUsuarioId
+          ? { ...e, presupuestoFichajes: e.presupuestoFichajes + montoOfrecido }
           : e
       )
     );
 
     // 2. Transferir el jugador
-    setJugadores(prevJugadores => 
-      prevJugadores.map(j => 
-        j.id === jugadorId 
-          ? { ...j, idEquipo: clubCompradorId, titular: false } 
+    setJugadores(prevJugadores =>
+      prevJugadores.map(j =>
+        j.id === jugadorId
+          ? { ...j, idEquipo: clubCompradorId, titular: false }
           : j
       )
     );
@@ -2499,10 +2923,10 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
 
     if (frustrado) {
-      setJugadores(prevJugadores => 
-        prevJugadores.map(j => 
-          j.id === jugadorId 
-            ? { ...j, moral: Math.max(1, j.moral - 35) } 
+      setJugadores(prevJugadores =>
+        prevJugadores.map(j =>
+          j.id === jugadorId
+            ? { ...j, moral: Math.max(1, j.moral - 35) }
             : j
         )
       );
@@ -2532,18 +2956,18 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     if (monto <= limiteAceptacion) {
       // IA Acepta
-      setEquipos(prevEquipos => 
-        prevEquipos.map(e => 
-          e.id === equipoUsuarioId 
-            ? { ...e, presupuestoFichajes: e.presupuestoFichajes + monto } 
+      setEquipos(prevEquipos =>
+        prevEquipos.map(e =>
+          e.id === equipoUsuarioId
+            ? { ...e, presupuestoFichajes: e.presupuestoFichajes + monto }
             : e
         )
       );
 
-      setJugadores(prevJugadores => 
-        prevJugadores.map(j => 
-          j.id === jugadorId 
-            ? { ...j, idEquipo: clubCompradorId, titular: false } 
+      setJugadores(prevJugadores =>
+        prevJugadores.map(j =>
+          j.id === jugadorId
+            ? { ...j, idEquipo: clubCompradorId, titular: false }
             : j
         )
       );
@@ -2589,7 +3013,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     // Calcular e ingresar recaudación de taquilla del partido para el equipo local
     const { asistencia, precioTicket, recaudacion } = calcularRecaudacionTaquilla(local);
-    setEquipos(prevEquipos => 
+    setEquipos(prevEquipos =>
       prevEquipos.map(e => {
         if (e.id === local.id) {
           return { ...e, presupuestoFichajes: e.presupuestoFichajes + recaudacion };
@@ -2622,7 +3046,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       // A. Control de Titulares
       if (jClon.titular) {
         jClon.partidosSeguidosBanco = 0;
-        
+
         // Cumplió promesa de minutos
         if (jClon.promesaMinutosActive) {
           jClon.promesaMinutosActive = false;
@@ -2936,13 +3360,13 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
 
     // 3. Evaluar la confianza de la directiva y las ruedas de prensa
-    const esClasico = !esCopa && ((local.id === 'real-madrid' && visitante.id === 'barcelona') || 
-                      (local.id === 'barcelona' && visitante.id === 'real-madrid'));
-                      
+    const esClasico = !esCopa && ((local.id === 'real-madrid' && visitante.id === 'barcelona') ||
+      (local.id === 'barcelona' && visitante.id === 'real-madrid'));
+
     let nuevasDerrotas = 0;
     let deltaConfianza = 0;
     let resultadoTexto = '';
-    
+
     if (golesUsuario > golesRival) {
       // Victoria
       if (esCopa) {
@@ -2967,36 +3391,36 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         deltaConfianza = esClasico ? -12 : -7;
         resultadoTexto = esClasico ? 'Dolorosa derrota en el Clásico. La directiva está sumamente decepcionada.' : 'Derrota decepcionante. La directiva empieza a dudar de tus planteamientos.';
       }
-      
+
       setDerrotasConsecutivas(prev => {
         nuevasDerrotas = prev + 1;
         return nuevasDerrotas;
       });
     }
-    
+
     setConfianzaDirectiva(prev => Math.max(0, Math.min(100, prev + deltaConfianza)));
-    
+
     // Agregar noticia de la junta directiva
     setNoticias(prev => [
       `💼 [Junta Directiva] ${resultadoTexto} (Confianza: ${deltaConfianza >= 0 ? '+' : ''}${deltaConfianza}%)`,
       ...prev
     ]);
-    
+
     // Rueda de Prensa
     const triggerPrensa = esClasico || (golesUsuario < golesRival && (derrotasConsecutivas + 1 >= 3 || nuevasDerrotas >= 3));
-    
+
     if (triggerPrensa) {
       const inicialUsuario = jugadoresActualizados.filter(j => j.idEquipo === equipoUsuarioId && j.titular);
-      const jugadorElegido = inicialUsuario.length > 0 
+      const jugadorElegido = inicialUsuario.length > 0
         ? inicialUsuario[Math.floor(Math.random() * inicialUsuario.length)]
         : jugadoresActualizados.filter(j => j.idEquipo === equipoUsuarioId)[0];
-        
+
       if (jugadorElegido) {
         let pregunta = '';
         let opcionProteger = '';
         let opcionCritica = '';
         let opcionEvasiva = '';
-        
+
         if (golesUsuario < golesRival) {
           pregunta = `🎙️ Periodista: "El rendimiento de ${jugadorElegido.nombre} hoy estuvo muy por debajo de lo esperado y el equipo sufrió la derrota. ¿Qué opina sobre su nivel?"`;
           opcionProteger = `Proteger al jugador: "Es un crack de clase mundial, confío plenamente en él."`;
@@ -3008,7 +3432,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           opcionCritica = `Crítica pública: "Cumplió con lo básico, pero a un jugador de su estatus le exijo siempre mucho más."`;
           opcionEvasiva = `Evasiva: "Destaco el esfuerzo colectivo del equipo por sobre cualquier individualidad."`;
         }
-        
+
         setRuedaPrensaActiva({
           pregunta,
           jugadorId: jugadorElegido.id,
@@ -3034,7 +3458,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             } as any
           ] as any
         });
-        
+
         setNoticias(prevNoticias => [
           `🚨 [Centro de Medios] Rueda de prensa obligatoria programada. Los periodistas esperan en la sala de prensa.`,
           ...prevNoticias
@@ -3049,14 +3473,67 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       eventos,
       local,
       visitante,
-      otroPartidoTexto: esCopa 
-        ? "Los demás partidos continentales de hoy se han disputado." 
+      otroPartidoTexto: esCopa
+        ? "Los demás partidos continentales de hoy se han disputado."
         : "Los demás partidos de esta jornada ya se han disputado."
     });
 
-    // 5. Limpiar partido en vivo
+    // 5. Evaluar consecuencias de promesas de titularidad
+    if (equipoUsuarioId) {
+      const conPromesa = jugadoresProcesados.filter(j => j.idEquipo === equipoUsuarioId && j.promesaTitularPendiente === true);
+      if (conPromesa.length > 0) {
+        const titularesIds = new Set(jugadoresProcesados.filter(j => j.idEquipo === equipoUsuarioId && j.titular).map(j => j.id));
+        const incumplidos = conPromesa.filter(j => !titularesIds.has(j.id));
+
+        if (incumplidos.length > 0) {
+          const amigosAfectados = new Set<string>();
+          incumplidos.forEach(j => {
+            if (j.amigosVestuarioIds) {
+              j.amigosVestuarioIds.forEach(amigoId => amigosAfectados.add(amigoId));
+            }
+          });
+
+          setJugadores(prev => prev.map(j => {
+            if (j.idEquipo !== equipoUsuarioId) return j;
+            if (incumplidos.some(x => x.id === j.id)) {
+              return { ...j, moral: 0, promesaTitularPendiente: false };
+            }
+            if (amigosAfectados.has(j.id)) {
+              return { ...j, moral: Math.max(1, Math.round(j.moral * 0.90)) };
+            }
+            return j;
+          }));
+
+          incumplidos.forEach(j => {
+            setNoticias(prev => [
+              `💔 [Promesa Rota] ${j.nombre} no fue titular a pesar de tu promesa. Su moral ha caído a CERO y el malestar se contagia al vestuario. ¡La situación es urgente!`,
+              ...prev
+            ]);
+          });
+        } else {
+          setJugadores(prev => prev.map(j => {
+            if (conPromesa.some(x => x.id === j.id)) {
+              return { ...j, promesaTitularPendiente: false };
+            }
+            return j;
+          }));
+        }
+      }
+    }
+
+    // 6. Generar Feed de la Hinchada
+    generarFeedHinchada('partido', {
+      local,
+      visitante,
+      golesLocal,
+      golesVisitante,
+      eventos,
+      clima: partidoEnVivo.clima
+    });
+
+    // 7. Limpiar partido en vivo
     setPartidoEnVivo(null);
-  }, [partidoEnVivo, equipoUsuarioId, derrotasConsecutivas, copaCampeones, procesarTransicionCopa]);
+  }, [partidoEnVivo, equipoUsuarioId, derrotasConsecutivas, copaCampeones, copaEuropa, procesarTransicionCopa, generarFeedHinchada]);
 
   // Resolver charla del vestuario
   const resolverCharla = useCallback((decision: 'prometer' | 'vender' | 'sancionar') => {
@@ -3542,6 +4019,321 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setEventoActivo(null);
   }, [eventoActivo, equipoUsuarioId]);
 
+  // ============================================================
+  // DESTITUCIÓN AUTOMÁTICA POR BAJA CONFIANZA (< 20%)
+  // ============================================================
+  React.useEffect(() => {
+    if (juegoIniciado && equipoUsuarioId && confianzaDirectiva < 20) {
+      const club = equipos.find(p => p.id === equipoUsuarioId);
+      const clubNombre = club?.nombre || "Club";
+
+      setReputacionManager(prev => Math.max(0, prev - 20));
+      setEquipos(prev => prev.map(e => e.id === equipoUsuarioId ? { ...e, sinEntrenador: true } : e));
+      setNoticias(prev => [
+        `🚨 [DESPIDO DE MÁNAGER] La directiva del ${clubNombre} ha rescindido de forma inmediata el contrato del mánager ${nombreManager} por la pérdida crítica de apoyo institucional (Confianza < 20%).`,
+        ...prev
+      ]);
+      setEquipoUsuarioId(null);
+      setConfianzaDirectiva(70);
+    }
+  }, [confianzaDirectiva, equipoUsuarioId, juegoIniciado, equipos, nombreManager]);
+
+  // ============================================================
+  // RESOLVER REUNIÓN PRIVADA EN LA OFICINA DEL MÁNAGER
+  // ============================================================
+  const resolverReunionPrivada = useCallback((decision: 'promesa' | 'autoritario' | 'salida') => {
+    if (!reunionPrivadaActiva || !equipoUsuarioId) return;
+
+    const { jugadorId, jugadorNombre } = reunionPrivadaActiva;
+
+    setJugadores(prev => prev.map(j => {
+      if (j.id !== jugadorId) return j;
+
+      let updates: Partial<Jugador> = {};
+
+      if (decision === 'promesa') {
+        updates.moral = Math.min(100, j.moral + 20);
+        updates.promesaTitularPendiente = true;
+        if (j.promesas) {
+          updates.promesas = j.promesas.map(p =>
+            p.estado === 'Incumplida' ? { ...p, estado: 'En proceso' as const } : p
+          );
+        }
+      } else if (decision === 'autoritario') {
+        updates.moral = Math.max(1, j.moral - 15);
+        if (reputacionManager >= 70) {
+          updates.atributos = {
+            ...j.atributos,
+            determinacion: Math.min(20, j.atributos.determinacion + 2)
+          };
+        }
+      } else if (decision === 'salida') {
+        updates.listaTransferibles = true;
+        updates.moral = Math.min(100, j.moral + 5);
+        if (j.promesas) {
+          updates.promesas = j.promesas.map(p =>
+            p.estado === 'Incumplida' ? { ...p, estado: 'En proceso' as const } : p
+          );
+        }
+      }
+
+      return { ...j, ...updates };
+    }));
+
+    const msgs = {
+      promesa: `🤝 [Oficina del Mánager] Le prometiste titularidad a ${jugadorNombre}. Su moral mejoró +20. ¡Ahora cumplí tu palabra!`,
+      autoritario: `💪 [Oficina del Mánager] Mantuviste posición firme con ${jugadorNombre}. Su moral bajó un poco${reputacionManager >= 70 ? ', pero su Determinación mejoró +2 gracias a tu reputación' : ''}.`,
+      salida: `📤 [Oficina del Mánager] ${jugadorNombre} acepta ser puesto en la lista de transferibles. Está disponible para negociaciones.`
+    };
+
+    setNoticias(prev => [msgs[decision], ...prev]);
+    setReunionPrivadaActiva(null);
+  }, [reunionPrivadaActiva, equipoUsuarioId, reputacionManager]);
+
+  // ============================================================
+  // ACEPTAR OFERTA DE EMPLEO
+  // ============================================================
+  const aceptarOfertaEmpleo = useCallback((nuevoEquipoId: string) => {
+    const nuevoClub = equipos.find(e => e.id === nuevoEquipoId);
+    if (!nuevoClub) return;
+
+    // Quitar la marca de vacante del nuevo club
+    setEquipos(prev => prev.map(e => e.id === nuevoEquipoId ? { ...e, sinEntrenador: false } : e));
+
+    // Determinar en qué liga está el nuevo equipo
+    let leagueId = 'la-liga';
+    let leagueName = 'La Liga EA Sports';
+    let leagueCountry = 'España';
+    let leagueTeamsStatic = equiposLaLiga;
+
+    if (equiposPremier.some(e => e.id === nuevoEquipoId)) {
+      leagueId = 'premier-league';
+      leagueName = 'Premier League';
+      leagueCountry = 'Inglaterra';
+      leagueTeamsStatic = equiposPremier;
+    } else if (equiposSerieA.some(e => e.id === nuevoEquipoId)) {
+      leagueId = 'serie-a';
+      leagueName = 'Serie A';
+      leagueCountry = 'Italia';
+      leagueTeamsStatic = equiposSerieA;
+    } else if (equiposBundesliga.some(e => e.id === nuevoEquipoId)) {
+      leagueId = 'bundesliga';
+      leagueName = 'Bundesliga';
+      leagueCountry = 'Alemania';
+      leagueTeamsStatic = equiposBundesliga;
+    }
+
+    const esMismaLiga = liga.id === leagueId;
+
+    if (esMismaLiga) {
+      setEquipoUsuarioId(nuevoEquipoId);
+      setConfianzaDirectiva(75);
+      setDerrotasConsecutivas(0);
+      setNoticias(prev => [
+        `💼 [Nuevo Club] El mánager ${nombreManager} ha asumido como director técnico de ${nuevoClub.nombre}.`,
+        ...prev
+      ]);
+    } else {
+      // Cambio de liga
+      const leagueTeams = leagueTeamsStatic;
+      const newTabla: TablaEquipo[] = leagueTeams.map(e => ({
+        idEquipo: e.id,
+        nombreEquipo: e.nombre,
+        partidosJugados: 0,
+        ganados: 0,
+        empatados: 0,
+        perdidos: 0,
+        golesFavor: 0,
+        golesContra: 0,
+        diferenciaGoles: 0,
+        puntos: 0,
+        forma: []
+      }));
+
+      const dateObj = new Date(fechaActual + 'T12:00:00');
+      const anioActual = dateObj.getFullYear();
+
+      setLiga({
+        id: leagueId,
+        nombre: leagueName,
+        pais: leagueCountry,
+        temporada: liga.temporada,
+        equipos: leagueTeams,
+        tabla: newTabla
+      });
+
+      const nuevaFechaInicioStr = `${anioActual}-08-17`;
+      const nuevoFixture = generarFixtureRoundRobin(
+        leagueTeams.map(e => e.id),
+        nuevaFechaInicioStr
+      );
+
+      setFixture(nuevoFixture);
+      setFechaActual(`${anioActual}-07-01`);
+
+      const nuevaCopa = inicializarCopa(equipos, nuevaFechaInicioStr, 'champions', leagueTeams, leagueCountry);
+      const nuevaCopaEu = inicializarCopa(equipos, nuevaFechaInicioStr, 'europa', leagueTeams, leagueCountry);
+      setCopaCampeones(nuevaCopa);
+      setCopaEuropa(nuevaCopaEu);
+
+      setEquipoUsuarioId(nuevoEquipoId);
+      setConfianzaDirectiva(75);
+      setDerrotasConsecutivas(0);
+
+      setNoticias(prev => [
+        `💼 [Nuevo Club] El mánager ${nombreManager} ha asumido como director técnico de ${nuevoClub.nombre}. Se muda a la liga ${leagueName} y comenzará la pretemporada.`,
+        ...prev
+      ]);
+    }
+  }, [equipos, liga, fechaActual, nombreManager]);
+
+  // ============================================================
+  // GUARDAR SORTEO DE COPA
+  // ============================================================
+  const guardarSorteoCopa = useCallback((
+    tipo: 'champions' | 'europa',
+    grupos: GrupoCopa[],
+    partidosGrupos: any[],
+    fase: 'grupos' | 'cuartos',
+    partidosCuartos?: PartidoCopa[]
+  ) => {
+    const isChampions = tipo === 'champions';
+    if (fase === 'grupos') {
+      if (isChampions) {
+        setCopaCampeones(prev => prev ? { ...prev, grupos, partidosGrupos, faseActual: 'grupos' } : null);
+        setSorteoCampeonesGruposVisto(true);
+      } else {
+        setCopaEuropa(prev => prev ? { ...prev, grupos, partidosGrupos, faseActual: 'grupos' } : null);
+        setSorteoEuropaGruposVisto(true);
+      }
+
+      const userClub = equipos.find(e => e.id === equipoUsuarioId);
+      const userGroup = grupos.find(g => g.equipos.includes(equipoUsuarioId || ''));
+      let text = '';
+      if (userGroup && userClub) {
+        const rivals = userGroup.equipos
+          .filter(id => id !== equipoUsuarioId)
+          .map(id => equipos.find(e => e.id === id)?.nombre || id);
+        text = ` Tu club (${userClub.nombre}) competirá en el Grupo ${userGroup.id} contra: ${rivals.join(', ')}.`;
+      }
+      setNoticias(prev => [
+        `🏆 [Sorteo Completado] Fixture y grupos de la ${isChampions ? 'Copa de Campeones' : 'Copa Europa'} definidos formalmente.${text}`,
+        ...prev
+      ]);
+    } else {
+      if (isChampions) {
+        setCopaCampeones(prev => prev ? { ...prev, cuartos: partidosCuartos ? { fecha: prev.cuartos?.fecha || '', partidos: partidosCuartos } : null, faseActual: 'cuartos' } : null);
+        setSorteoCampeonesCuartosVisto(true);
+      } else {
+        setCopaEuropa(prev => prev ? { ...prev, cuartos: partidosCuartos ? { fecha: prev.cuartos?.fecha || '', partidos: partidosCuartos } : null, faseActual: 'cuartos' } : null);
+        setSorteoEuropaCuartosVisto(true);
+      }
+
+      let text = '';
+      if (partidosCuartos && equipoUsuarioId) {
+        const match = partidosCuartos.find(p => p.localId === equipoUsuarioId || p.visitanteId === equipoUsuarioId);
+        if (match) {
+          const rivalId = match.localId === equipoUsuarioId ? match.visitanteId : match.localId;
+          const rivalName = equipos.find(e => e.id === rivalId)?.nombre || rivalId;
+          text = ` ¡Tu equipo se enfrentará a ${rivalName} en los Cuartos de Final!`;
+        }
+      }
+      setNoticias(prev => [
+        `🏆 [Sorteo Completado] Cruces de Cuartos de Final de la ${isChampions ? 'Copa de Campeones' : 'Copa Europa'} confirmados.${text}`,
+        ...prev
+      ]);
+    }
+    setSorteoCopaActivo(null);
+  }, [equipoUsuarioId, equipos]);
+
+  // ============================================================
+  // ACCIONES COMPLEMENTARIAS
+  // ============================================================
+  const toggleTransferible = useCallback((jugadorId: string) => {
+    setJugadores(prev => prev.map(j =>
+      j.id === jugadorId ? { ...j, listaTransferibles: !j.listaTransferibles, intransferible: false } : j
+    ));
+  }, []);
+
+  const designarCapitan = useCallback((jugadorId: string) => {
+    setJugadores(prev => {
+      const p = prev.find(v => v.id === jugadorId);
+      if (!p) return prev;
+      setNoticias(v => [`👑 [Capitán] Has designado a ${p.nombre} como el nuevo capitán de tu plantilla.`, ...v]);
+      return prev.map(v => v.idEquipo === p.idEquipo ? { ...v, esCapitan: v.id === jugadorId } : v);
+    });
+  }, []);
+
+  const darCharlaMotivacional = useCallback(() => {
+    if (!equipoUsuarioId) return { exito: false, mensaje: "No hay equipo seleccionado." };
+    let msg = "";
+    let ok = false;
+    setEquipos(prev => {
+      const v = prev.find(F => F.id === equipoUsuarioId);
+      if (!v) return prev;
+      if (v.semanaCharlaRealizada) {
+        msg = "Ya diste una charla motivacional esta semana. Esperá al próximo lunes.";
+        return prev;
+      }
+      ok = true;
+      msg = "¡La charla motivacional fue todo un éxito! El plantel se siente más unido y enfocado (+3 Química de Vestuario).";
+      setNoticias(F => ["🗣️ [Charla Motivacional] El DT reunió al plantel para una charla motivacional. ¡La unión del vestuario mejora! (+3 Química).", ...F]);
+      setJugadores(F => F.map(j => j.idEquipo === equipoUsuarioId ? { ...j, moral: Math.min(100, j.moral + 5) } : j));
+      return prev.map(F => F.id === equipoUsuarioId ? { ...F, quimicaVestuario: Math.min(100, (F.quimicaVestuario || 70) + 3), semanaCharlaRealizada: true } : F);
+    });
+    return { exito: ok, mensaje: msg };
+  }, [equipoUsuarioId]);
+
+  const organizarActividadCohesion = useCallback(() => {
+    if (!equipoUsuarioId) return { exito: false, mensaje: "No hay equipo seleccionado." };
+    let msg = "";
+    let ok = false;
+    const cost = 20000;
+    setEquipos(prev => {
+      const v = prev.find(F => F.id === equipoUsuarioId);
+      if (!v) return prev;
+      if (v.semanaActividadRealizada) {
+        msg = "Ya organizaste una actividad de cohesión esta semana. Esperá al próximo lunes.";
+        return prev;
+      }
+      if (v.presupuestoFichajes < cost) {
+        msg = `Presupuesto insuficiente. La actividad cuesta ${formatearMoneda(cost)} pero solo tenés ${formatearMoneda(v.presupuestoFichajes)}.`;
+        return prev;
+      }
+      ok = true;
+      msg = "¡La actividad de cohesión (cena y paintball) fue genial! El vestuario está en sintonía (+7 Química de Vestuario).";
+      setNoticias(F => [`🤝 [Cohesión de Grupo] El DT organizó una actividad recreativa para el vestuario (-${formatearMoneda(cost)}). ¡Gran ambiente en el grupo! (+7 Química).`, ...F]);
+      setJugadores(F => F.map(j => j.idEquipo === equipoUsuarioId ? { ...j, moral: Math.min(100, j.moral + 10) } : j));
+      return prev.map(F => F.id === equipoUsuarioId ? { ...F, presupuestoFichajes: F.presupuestoFichajes - cost, quimicaVestuario: Math.min(100, (F.quimicaVestuario || 70) + 7), semanaActividadRealizada: true } : F);
+    });
+    return { exito: ok, mensaje: msg };
+  }, [equipoUsuarioId]);
+
+  const ofrecerContratoLibre = useCallback((jugadorId: string, salarioSemanal: number, clausulaRescision?: number) => {
+    if (!equipoUsuarioId) return { aceptado: false, mensaje: "No has seleccionado un club." };
+    const v = jugadores.find(k => k.id === jugadorId);
+    if (!v) return { aceptado: false, mensaje: "Jugador no encontrado." };
+    if (!v.mesesContrato || v.mesesContrato > 6) return { aceptado: false, mensaje: "Este jugador tiene más de 6 meses de contrato y no se puede negociar libremente." };
+
+    const F = equipos.find(k => k.id === equipoUsuarioId)!;
+    const minSalary = Math.max(v.salarioSemanal * 1.15, Math.round(v.ca ** 2 * 35));
+    let ok = false;
+    let msg = "";
+
+    if (salarioSemanal >= minSalary) {
+      ok = true;
+      msg = `¡Preacuerdo Firmado! ${v.nombre} ha aceptado tus términos de contrato (${formatearMoneda(salarioSemanal)}/sem y cláusula de ${clausulaRescision ? formatearMoneda(clausulaRescision) : 'Sin cláusula'}). Se unirá al ${F.nombre} libre de contrato el 1 de Julio.`;
+      setJugadores(prev => prev.map(j => j.id === jugadorId ? { ...j, preacuerdoClubId: equipoUsuarioId, preacuerdoSalario: salarioSemanal, preacuerdoClausula: clausulaRescision } : j));
+      setNoticias(prev => [`🤝 [Preacuerdo Bosman] ¡Acuerdo para la próxima temporada! El mánager del ${F.nombre} ha cerrado la incorporación libre de ${v.nombre} para el próximo 1 de Julio.`, ...prev]);
+    } else {
+      ok = false;
+      msg = `Rechazado. El representante de ${v.nombre} exige un salario semanal de al menos ${formatearMoneda(minSalary)}/sem.`;
+    }
+    return { aceptado: ok, mensaje: msg };
+  }, [jugadores, equipos, equipoUsuarioId]);
+
+
+
   return (
     <GameContext.Provider
       value={{
@@ -3600,7 +4392,22 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         horasDeadline,
         jugadoresAgentes,
         avanzarHoraDeadline,
-        comprarJugadorAgente
+        comprarJugadorAgente,
+        nombreManager,
+        reputacionManager,
+        historialTitulos,
+        juegoIniciado,
+        aceptarOfertaEmpleo,
+        reunionPrivadaActiva,
+        resolverReunionPrivada,
+        sorteoCopaActivo,
+        guardarSorteoCopa,
+        toggleTransferible,
+        designarCapitan,
+        darCharlaMotivacional,
+        organizarActividadCohesion,
+        ofrecerContratoLibre,
+        feedHinchada
       }}
     >
       {children}

@@ -2,6 +2,7 @@ import React from 'react';
 import { useGame } from '../context/useGame';
 import { Equipo, Jornada } from '../types';
 import { CentroDeMedios } from './CentroDeMedios';
+import { FeedHinchada } from './FeedHinchada';
 import { obtenerDebilidadEquipo } from '../engine/matchEngine';
 
 // Formateador de dinero
@@ -574,51 +575,61 @@ export const DashboardView: React.FC = () => {
         </div>
 
         {/* ==========================================
-            PANEL DE RESUMEN DEL FIXTURE DE LA LIGA
+            COLUMNA DERECHA (FIXTURE Y FEED DE LA HINCHADA)
             ========================================== */}
-        <div className="bg-slate-900/40 border border-slate-800/80 rounded-2xl p-6 flex flex-col justify-between shadow-lg backdrop-blur-md">
-          <div>
-            <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2 border-b border-slate-800 pb-2">
-              📅 Calendario de Partidos
-            </h3>
-            
-            <div className="space-y-3.5 max-h-[300px] overflow-y-auto pr-1 custom-scrollbar">
-              {fixture.map((jornada) => {
-                const esHoy = jornada.fecha === fechaActual;
-                
-                // Buscar partido del usuario en esta jornada
-                const part = jornada.partidos.find(p => p.localId === equipoUsuario.id || p.visitanteId === equipoUsuario.id);
-                if (!part) return null;
+        <div className="space-y-6">
+          {/* ==========================================
+              PANEL DE RESUMEN DEL FIXTURE DE LA LIGA
+              ========================================== */}
+          <div className="bg-slate-900/40 border border-slate-800/80 rounded-2xl p-6 flex flex-col justify-between shadow-lg backdrop-blur-md">
+            <div>
+              <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2 border-b border-slate-800 pb-2">
+                📅 Calendario de Partidos
+              </h3>
+              
+              <div className="space-y-3.5 max-h-[300px] overflow-y-auto pr-1 custom-scrollbar">
+                {fixture.map((jornada) => {
+                  const esHoy = jornada.fecha === fechaActual;
+                  
+                  // Buscar partido del usuario en esta jornada
+                  const part = jornada.partidos.find(p => p.localId === equipoUsuario.id || p.visitanteId === equipoUsuario.id);
+                  if (!part) return null;
 
-                const localObj = equipos.find(e => e.id === part.localId);
-                const visitanteObj = equipos.find(e => e.id === part.visitanteId);
+                  const localObj = equipos.find(e => e.id === part.localId);
+                  const visitanteObj = equipos.find(e => e.id === part.visitanteId);
 
-                return (
-                  <div 
-                    key={jornada.numero}
-                    className={`p-2.5 rounded-lg border text-xs flex justify-between items-center transition-all ${
-                      esHoy 
-                        ? 'bg-teal-500/10 border-teal-500/30 font-bold' 
-                        : 'bg-slate-950/40 border-slate-800/60'
-                    }`}
-                  >
-                    <div>
-                      <div className="font-bold text-slate-350">Jornada {jornada.numero}</div>
-                      <div className="text-[10px] text-slate-500">{jornada.fecha}</div>
+                  return (
+                    <div 
+                      key={jornada.numero}
+                      className={`p-2.5 rounded-lg border text-xs flex justify-between items-center transition-all ${
+                        esHoy 
+                          ? 'bg-teal-500/10 border-teal-500/30 font-bold' 
+                          : 'bg-slate-950/40 border-slate-800/60'
+                      }`}
+                    >
+                      <div>
+                        <div className="font-bold text-slate-350">Jornada {jornada.numero}</div>
+                        <div className="text-[10px] text-slate-500">{jornada.fecha}</div>
+                      </div>
+                      
+                      <div className="font-semibold text-slate-400 text-right">
+                        {localObj?.escudo} {localObj?.nombreCorto} <span className="text-slate-650 font-bold px-1 text-[10px]">vs</span> {visitanteObj?.escudo} {visitanteObj?.nombreCorto}
+                      </div>
                     </div>
-                    
-                    <div className="font-semibold text-slate-400 text-right">
-                      {localObj?.escudo} {localObj?.nombreCorto} <span className="text-slate-650 font-bold px-1 text-[10px]">vs</span> {visitanteObj?.escudo} {visitanteObj?.nombreCorto}
-                    </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="text-[10px] text-slate-500 border-t border-slate-800 pt-4 leading-normal mt-6">
+              💡 Los partidos se juegan únicamente en las fechas programadas en el fixture. Avanzá los días para progresar en el calendario.
             </div>
           </div>
 
-          <div className="text-[10px] text-slate-500 border-t border-slate-800 pt-4 leading-normal mt-6">
-            💡 Los partidos se juegan únicamente en las fechas programadas en el fixture. Avanzá los días para progresar en el calendario.
-          </div>
+          {/* ==========================================
+              FEED DE REACCIONES DE LA HINCHADA
+              ========================================== */}
+          <FeedHinchada />
         </div>
 
       </div>
