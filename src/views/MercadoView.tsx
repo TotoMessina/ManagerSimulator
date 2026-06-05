@@ -69,7 +69,12 @@ export const MercadoView: React.FC = () => {
   // Abrir modal de oferta
   const abrirModalOferta = (jugador: Jugador) => {
     setJugadorAOfrecer(jugador);
-    setOfertaValor(jugador.valorMercado); // Inicializar oferta en su valor de mercado actual
+    const esLibre = jugador.idEquipo === 'libre' || !jugador.idEquipo;
+    if (equipoUsuario.ffpPenalizado && esLibre) {
+      setOfertaValor(0);
+    } else {
+      setOfertaValor(jugador.valorMercado); // Inicializar oferta en su valor de mercado actual
+    }
     setClausulaOfrecidaCompra(Math.round((jugador.valorMercado * 1.8) / 1000) * 1000);
     setFeedbackNegociacion(null);
 
@@ -151,6 +156,20 @@ export const MercadoView: React.FC = () => {
           />
         </div>
       </div>
+
+      {equipoUsuario.ffpPenalizado && (
+        <div className="p-4 bg-red-950/40 border border-red-500/25 rounded-2xl flex items-start gap-3 shadow-lg backdrop-blur-md">
+          <span className="text-xl mt-0.5">⚠️</span>
+          <div>
+            <h4 className="text-sm font-extrabold text-red-400">Sanción del Fair Play Financiero Activa</h4>
+            <p className="text-xs text-slate-300 mt-1 leading-relaxed">
+              Tu club ha infringido las reglas del FFP al gastar más del 80% de sus ingresos anuales en sueldos y fichajes por dos temporadas consecutivas.
+              Se te han descontado **9 puntos** en la tabla y las transferencias de pago están **bloqueadas**.
+              Solo puedes incorporar **agentes libres a coste cero** (oferta de fichaje de 0€).
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Filtros de Posición y Panel de Ordenación */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
@@ -311,14 +330,26 @@ export const MercadoView: React.FC = () => {
                         <div className="flex flex-col sm:flex-row gap-1.5 justify-center items-center">
                           <button
                             onClick={() => abrirModalOferta(jugador)}
-                            className="w-full sm:w-auto px-3 py-1.5 bg-slate-800 hover:bg-teal-650 border border-slate-700 text-teal-450 hover:text-white font-bold rounded-lg transition-all text-[10px] uppercase tracking-wide"
+                            disabled={equipoUsuario.ffpPenalizado && jugador.idEquipo !== 'libre' && jugador.idEquipo !== undefined}
+                            className={`w-full sm:w-auto px-3 py-1.5 font-bold rounded-lg transition-all text-[10px] uppercase tracking-wide border ${
+                              equipoUsuario.ffpPenalizado && jugador.idEquipo !== 'libre' && jugador.idEquipo !== undefined
+                                ? 'bg-slate-900 border-slate-850 text-slate-650 cursor-not-allowed'
+                                : 'bg-slate-800 hover:bg-teal-650 border-slate-700 text-teal-450 hover:text-white'
+                            }`}
+                            title={equipoUsuario.ffpPenalizado && jugador.idEquipo !== 'libre' && jugador.idEquipo !== undefined ? 'Bloqueado por sanción FFP' : undefined}
                           >
                             Ofertar
                           </button>
                           {jugador.mesesContrato !== undefined && jugador.mesesContrato <= 6 && (
                             <button
                               onClick={() => abrirModalBosman(jugador)}
-                              className="w-full sm:w-auto px-2 py-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold rounded-lg transition-all text-[10px] uppercase tracking-wide whitespace-nowrap"
+                              disabled={equipoUsuario.ffpPenalizado}
+                              className={`w-full sm:w-auto px-2 py-1.5 font-bold rounded-lg transition-all text-[10px] uppercase tracking-wide whitespace-nowrap border ${
+                                equipoUsuario.ffpPenalizado
+                                  ? 'bg-slate-900 border-slate-850 text-slate-650 cursor-not-allowed'
+                                  : 'bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white'
+                              }`}
+                              title={equipoUsuario.ffpPenalizado ? 'Bloqueado por sanción FFP' : undefined}
                             >
                               Fichar Libre
                             </button>
@@ -456,25 +487,31 @@ export const MercadoView: React.FC = () => {
                     <div className="relative">
                       <input
                         type="number"
-                        min="1"
-                        max={equipoUsuario.presupuestoFichajes}
+                        min={equipoUsuario.ffpPenalizado && (jugadorAOfrecer.idEquipo === 'libre' || !jugadorAOfrecer.idEquipo) ? "0" : "1"}
+                        max={equipoUsuario.ffpPenalizado && (jugadorAOfrecer.idEquipo === 'libre' || !jugadorAOfrecer.idEquipo) ? "0" : equipoUsuario.presupuestoFichajes}
                         value={ofertaValor}
                         onChange={(e) => setOfertaValor(Number(e.target.value))}
-                        disabled={equipoUsuario.presupuestoFichajes <= 0}
+                        disabled={equipoUsuario.presupuestoFichajes <= 0 || (equipoUsuario.ffpPenalizado && (jugadorAOfrecer.idEquipo === 'libre' || !jugadorAOfrecer.idEquipo))}
                         className="w-full bg-slate-950 border border-slate-850 rounded-xl py-2.5 px-4 text-sm font-semibold text-slate-100 focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500 transition-all font-mono"
                         required
                       />
                       <span className="absolute right-4 inset-y-0 flex items-center text-xs font-extrabold text-slate-500">€</span>
                     </div>
-                    <span className="text-[10px] text-slate-500 block leading-normal">
-                      Consejo: El club rival podría aceptar ofertas por debajo de su valor si no es un jugador franquicia, pero los jugadores clave serán declarados intransferibles y exigirán montos muy superiores a su valor real.
-                    </span>
+                    {equipoUsuario.ffpPenalizado && (jugadorAOfrecer.idEquipo === 'libre' || !jugadorAOfrecer.idEquipo) ? (
+                      <span className="text-[10px] text-rose-450 block leading-normal font-semibold">
+                        Debido a la sanción de Fair Play Financiero, solo puedes incorporar a este agente libre por una prima de 0€.
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-slate-500 block leading-normal">
+                        Consejo: El club rival podría aceptar ofertas por debajo de su valor si no es un jugador franquicia, pero los jugadores clave serán declarados intransferibles y exigirán montos muy superiores a su valor real.
+                      </span>
+                    )}
                   </div>
 
                   {/* Campo de nueva cláusula de rescisión */}
                   <div className="space-y-1.5">
                     <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                      Nueva Cláusula de Rescisión (€) <span className="text-slate-400 font-normal">(Opcional)</span>Nueva Cláusula de Rescisión (€) <span className="text-rose-500">*</span>
+                      Nueva Cláusula de Rescisión (€) <span className="text-slate-400 font-normal">(Opcional)</span>
                     </label>
                     <div className="relative">
                       <input
@@ -482,6 +519,7 @@ export const MercadoView: React.FC = () => {
                         value={clausulaOfrecidaCompra || ''}
                         onChange={(e) => setClausulaOfrecidaCompra(Number(e.target.value) || 0)}
                         placeholder="Sin cláusula"
+                        disabled={equipoUsuario.ffpPenalizado && (jugadorAOfrecer.idEquipo === 'libre' || !jugadorAOfrecer.idEquipo)}
                         className="w-full bg-slate-950 border border-slate-850 rounded-xl py-2.5 px-4 text-sm font-semibold text-slate-100 focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500 transition-all font-mono"
                       />
                       <span className="absolute right-4 inset-y-0 flex items-center text-xs font-extrabold text-slate-500">€</span>
@@ -501,7 +539,10 @@ export const MercadoView: React.FC = () => {
                     </button>
                     <button
                       type="submit"
-                      disabled={ofertaValor <= 0 || ofertaValor > equipoUsuario.presupuestoFichajes}
+                      disabled={
+                        (equipoUsuario.ffpPenalizado && (jugadorAOfrecer.idEquipo === 'libre' || !jugadorAOfrecer.idEquipo) && ofertaValor !== 0) ||
+                        (!equipoUsuario.ffpPenalizado && (ofertaValor <= 0 || ofertaValor > equipoUsuario.presupuestoFichajes))
+                      }
                       className="px-5 py-2 bg-teal-600 hover:bg-teal-500 text-white font-bold rounded-lg text-xs uppercase tracking-wider shadow-md transition-all active:scale-95 disabled:opacity-50 disabled:pointer-events-none"
                     >
                       Enviar Propuesta

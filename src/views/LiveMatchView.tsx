@@ -17,7 +17,8 @@ export const LiveMatchView: React.FC = () => {
     jugadores,
     equipos,
     equipoUsuarioId,
-    finalizarPartidoEnVivo
+    finalizarPartidoEnVivo,
+    obtenerModoPresionEquipo
   } = useGame();
 
   if (!partidoEnVivo) {
@@ -34,6 +35,10 @@ export const LiveMatchView: React.FC = () => {
   const equipoRival = esLocalUsuario ? visitante : local;
 
   const clima = partidoEnVivo.clima || 'Soleado';
+
+  const esLiga = partidoEnVivo.tipo !== 'copa';
+  const presionLocal = esLiga && obtenerModoPresionEquipo ? obtenerModoPresionEquipo(local.id, partidoEnVivo.jornada.numero) : false;
+  const presionVisitante = esLiga && obtenerModoPresionEquipo ? obtenerModoPresionEquipo(visitante.id, partidoEnVivo.jornada.numero) : false;
 
   const CLIMA_DETALLES = {
     'Soleado': {
@@ -386,6 +391,18 @@ export const LiveMatchView: React.FC = () => {
           atributosAjustados.fuerza = Math.min(20, Math.round(atributosAjustados.fuerza * 1.10));
         }
 
+        // --- MODO PRESIÓN ---
+        if (presionLocal) {
+          const mp = j.manejoPresion !== undefined ? j.manejoPresion : 10;
+          if (mp < 12) {
+            atributosAjustados.decisiones = Math.max(1, Math.round(atributosAjustados.decisiones * 0.85));
+            atributosAjustados.remate = Math.max(1, Math.round(atributosAjustados.remate * 0.85));
+          } else if (mp >= 16 || j.personalidad === 'Líder') {
+            atributosAjustados.decisiones = Math.min(20, Math.round(atributosAjustados.decisiones * 1.10));
+            atributosAjustados.remate = Math.min(20, Math.round(atributosAjustados.remate * 1.10));
+          }
+        }
+
         return { ...j, moral: moralConBonus, atributos: atributosAjustados };
       });
 
@@ -410,6 +427,18 @@ export const LiveMatchView: React.FC = () => {
             atributosAjustados.aceleracion = Math.max(1, Math.round(atributosAjustados.aceleracion * 0.85));
           }
           atributosAjustados.fuerza = Math.min(20, Math.round(atributosAjustados.fuerza * 1.10));
+        }
+
+        // --- MODO PRESIÓN ---
+        if (presionVisitante) {
+          const mp = j.manejoPresion !== undefined ? j.manejoPresion : 10;
+          if (mp < 12) {
+            atributosAjustados.decisiones = Math.max(1, Math.round(atributosAjustados.decisiones * 0.85));
+            atributosAjustados.remate = Math.max(1, Math.round(atributosAjustados.remate * 0.85));
+          } else if (mp >= 16 || j.personalidad === 'Líder') {
+            atributosAjustados.decisiones = Math.min(20, Math.round(atributosAjustados.decisiones * 1.10));
+            atributosAjustados.remate = Math.min(20, Math.round(atributosAjustados.remate * 1.10));
+          }
         }
 
         return { ...j, atributos: atributosAjustados };
@@ -732,6 +761,18 @@ export const LiveMatchView: React.FC = () => {
             atributosAjustados.fuerza = Math.min(20, Math.round(atributosAjustados.fuerza * 1.10));
           }
 
+          // --- MODO PRESIÓN ---
+          if (presionLocal) {
+            const mp = j.manejoPresion !== undefined ? j.manejoPresion : 10;
+            if (mp < 12) {
+              atributosAjustados.decisiones = Math.max(1, Math.round(atributosAjustados.decisiones * 0.85));
+              atributosAjustados.remate = Math.max(1, Math.round(atributosAjustados.remate * 0.85));
+            } else if (mp >= 16 || j.personalidad === 'Líder') {
+              atributosAjustados.decisiones = Math.min(20, Math.round(atributosAjustados.decisiones * 1.10));
+              atributosAjustados.remate = Math.min(20, Math.round(atributosAjustados.remate * 1.10));
+            }
+          }
+
           return { ...j, moral: moralConBonus, atributos: atributosAjustados };
         });
 
@@ -756,6 +797,18 @@ export const LiveMatchView: React.FC = () => {
               atributosAjustados.aceleracion = Math.max(1, Math.round(atributosAjustados.aceleracion * 0.85));
             }
             atributosAjustados.fuerza = Math.min(20, Math.round(atributosAjustados.fuerza * 1.10));
+          }
+
+          // --- MODO PRESIÓN ---
+          if (presionVisitante) {
+            const mp = j.manejoPresion !== undefined ? j.manejoPresion : 10;
+            if (mp < 12) {
+              atributosAjustados.decisiones = Math.max(1, Math.round(atributosAjustados.decisiones * 0.85));
+              atributosAjustados.remate = Math.max(1, Math.round(atributosAjustados.remate * 0.85));
+            } else if (mp >= 16 || j.personalidad === 'Líder') {
+              atributosAjustados.decisiones = Math.min(20, Math.round(atributosAjustados.decisiones * 1.10));
+              atributosAjustados.remate = Math.min(20, Math.round(atributosAjustados.remate * 1.10));
+            }
           }
 
           return { ...j, atributos: atributosAjustados };

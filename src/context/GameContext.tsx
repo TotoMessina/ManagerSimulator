@@ -37,6 +37,7 @@ export interface GameContextProps {
   deadlineDayActivo: boolean;
   horasDeadline: number;
   jugadoresAgentes: JugadorAgente[];
+  subastaCrisis: { clubId: string; clubNombre: string; clubEscudo: string; jugadoresIds: string[] } | null;
 
   nombreManager: string;
   reputacionManager: number;
@@ -93,6 +94,7 @@ export interface GameContextProps {
   recordsClub: RecordsClub;
   recordModalActivo: { mensaje: string } | null;
   cerrarRecordModal: () => void;
+  obtenerModoPresionEquipo: (equipoId: string, jornadaNumero: number) => boolean;
 }
 
 export const GameContext = createContext<GameContextProps | undefined>(undefined);
@@ -1201,11 +1203,19 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const playersWithTitular = jugadoresIniciales.map(j => ({
       ...j,
       titular: false,
+      manejoPresion: j.manejoPresion !== undefined ? j.manejoPresion : (
+        (j.id === 'haaland' || j.nombre.includes('Mbappé') || j.nombre.includes('Mbappe') || j.ca >= 85)
+          ? randomRange(18, 20)
+          : (j.edad < 20 ? randomRange(8, 12) : randomRange(1, 20))
+      ),
       mesesContrato: j.mesesContrato !== undefined ? j.mesesContrato : Math.floor(Math.random() * 25) + 6,
       rasgos: j.rasgos || generarRasgosAleatorios(j.posicion),
       golesHistoricos: j.goles || 0,
       asistenciasHistoricos: j.asistencias || 0,
-      partidosHistoricos: j.partidosJugados || 0
+      partidosHistoricos: j.partidosJugados || 0,
+      idAmigos: j.idAmigos || [],
+      idRivales: j.idRivales || [],
+      quimicaPosicional: j.quimicaPosicional || {}
     }));
     const teamIds = Array.from(new Set(playersWithTitular.map(p => p.idEquipo)));
     teamIds.forEach(teamId => {
@@ -1253,6 +1263,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [deadlineDayActivo, setDeadlineDayActivo] = useState<boolean>(false);
   const [horasDeadline, setHorasDeadline] = useState<number>(24);
   const [jugadoresAgentes, setJugadoresAgentes] = useState<JugadorAgente[]>([]);
+  const [subastaCrisis, setSubastaCrisis] = useState<{ clubId: string; clubNombre: string; clubEscudo: string; jugadoresIds: string[] } | null>(null);
 
   const [nombreManager, setNombreManager] = useState<string>('DT Mánager');
   const [reputacionManager, setReputacionManager] = useState<number>(50);
@@ -1297,6 +1308,171 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [noticias, setNoticias] = useState<string[]>([
     '📰 Oficina de Prensa: ¡Te damos la bienvenida a tu nueva carrera! Planificá los entrenamientos y prepará tus fichajes en el mercado.'
   ]);
+
+  // --- CARGA AUTOMÁTICA DE PARTIDA (LOCALSTORAGE) ---
+  React.useEffect(() => {
+    try {
+      const saved = localStorage.getItem('football_manager_save_state');
+      if (saved) {
+        const state = JSON.parse(saved);
+        if (state.juegoIniciado) {
+          if (state.equipos) setEquipos(state.equipos);
+          if (state.jugadores) setJugadores(state.jugadores);
+          if (state.recordsClub) setRecordsClub(state.recordsClub);
+          if (state.recordModalActivo !== undefined) setRecordModalActivo(state.recordModalActivo);
+          if (state.liga) setLiga(state.liga);
+          if (state.fechaActual) setFechaActual(state.fechaActual);
+          if (state.equipoUsuarioId !== undefined) setEquipoUsuarioId(state.equipoUsuarioId);
+          if (state.partidoReciente !== undefined) setPartidoReciente(state.partidoReciente);
+          if (state.mesesEnQuiebra !== undefined) setMesesEnQuiebra(state.mesesEnQuiebra);
+          if (state.confianzaDirectiva !== undefined) setConfianzaDirectiva(state.confianzaDirectiva);
+          if (state.ruedaPrensaActiva !== undefined) setRuedaPrensaActiva(state.ruedaPrensaActiva);
+          if (state.derrotasConsecutivas !== undefined) setDerrotasConsecutivas(state.derrotasConsecutivas);
+          if (state.ofertaRecibidaActiva !== undefined) setOfertaRecibidaActiva(state.ofertaRecibidaActiva);
+          if (state.fixture) setFixture(state.fixture);
+          if (state.reporteAcademia !== undefined) setReporteAcademia(state.reporteAcademia);
+          if (state.partidoEnVivo !== undefined) setPartidoEnVivo(state.partidoEnVivo);
+          if (state.charlaActiva !== undefined) setCharlaActiva(state.charlaActiva);
+          if (state.copaCampeones !== undefined) setCopaCampeones(state.copaCampeones);
+          if (state.copaEuropa !== undefined) setCopaEuropa(state.copaEuropa);
+          if (state.eventoActivo !== undefined) setEventoActivo(state.eventoActivo);
+          if (state.deadlineDayActivo !== undefined) setDeadlineDayActivo(state.deadlineDayActivo);
+          if (state.horasDeadline !== undefined) setHorasDeadline(state.horasDeadline);
+          if (state.jugadoresAgentes) setJugadoresAgentes(state.jugadoresAgentes);
+          if (state.subastaCrisis !== undefined) setSubastaCrisis(state.subastaCrisis);
+          if (state.nombreManager) setNombreManager(state.nombreManager);
+          if (state.reputacionManager !== undefined) setReputacionManager(state.reputacionManager);
+          if (state.historialTitulos) setHistorialTitulos(state.historialTitulos);
+          if (state.reunionPrivadaActiva !== undefined) setReunionPrivadaActiva(state.reunionPrivadaActiva);
+          if (state.sorteoCopaActivo !== undefined) setSorteoCopaActivo(state.sorteoCopaActivo);
+          if (state.sorteoCampeonesGruposVisto !== undefined) setSorteoCampeonesGruposVisto(state.sorteoCampeonesGruposVisto);
+          if (state.sorteoCampeonesCuartosVisto !== undefined) setSorteoCampeonesCuartosVisto(state.sorteoCampeonesCuartosVisto);
+          if (state.sorteoEuropaGruposVisto !== undefined) setSorteoEuropaGruposVisto(state.sorteoEuropaGruposVisto);
+          if (state.sorteoEuropaCuartosVisto !== undefined) setSorteoEuropaCuartosVisto(state.sorteoEuropaCuartosVisto);
+          if (state.feedHinchada) setFeedHinchada(state.feedHinchada);
+          if (state.noticias) setNoticias(state.noticias);
+          
+          setJuegoIniciado(true);
+        }
+      }
+    } catch (e) {
+      console.error('Error al cargar la partida guardada:', e);
+    }
+  }, []);
+
+  // --- GUARDADO AUTOMÁTICO DE PARTIDA (LOCALSTORAGE) ---
+  React.useEffect(() => {
+    if (juegoIniciado) {
+      try {
+        const stateToSave = {
+          juegoIniciado,
+          nombreManager,
+          reputacionManager,
+          historialTitulos,
+          equipoUsuarioId,
+          equipos,
+          jugadores,
+          liga,
+          fechaActual,
+          fixture,
+          noticias,
+          mesesEnQuiebra,
+          confianzaDirectiva,
+          derrotasConsecutivas,
+          ofertaRecibidaActiva,
+          reporteAcademia,
+          partidoReciente,
+          partidoEnVivo,
+          charlaActiva,
+          copaCampeones,
+          copaEuropa,
+          eventoActivo,
+          deadlineDayActivo,
+          horasDeadline,
+          jugadoresAgentes,
+          subastaCrisis,
+          reunionPrivadaActiva,
+          sorteoCopaActivo,
+          sorteoCampeonesGruposVisto,
+          sorteoCampeonesCuartosVisto,
+          sorteoEuropaGruposVisto,
+          sorteoEuropaCuartosVisto,
+          recordsClub,
+          feedHinchada
+        };
+        localStorage.setItem('football_manager_save_state', JSON.stringify(stateToSave));
+      } catch (e) {
+        console.error('Error al guardar la partida:', e);
+      }
+    } else {
+      localStorage.removeItem('football_manager_save_state');
+    }
+  }, [
+    juegoIniciado,
+    nombreManager,
+    reputacionManager,
+    historialTitulos,
+    equipoUsuarioId,
+    equipos,
+    jugadores,
+    liga,
+    fechaActual,
+    fixture,
+    noticias,
+    mesesEnQuiebra,
+    confianzaDirectiva,
+    derrotasConsecutivas,
+    ofertaRecibidaActiva,
+    reporteAcademia,
+    partidoReciente,
+    partidoEnVivo,
+    charlaActiva,
+    copaCampeones,
+    copaEuropa,
+    eventoActivo,
+    deadlineDayActivo,
+    horasDeadline,
+    jugadoresAgentes,
+    subastaCrisis,
+    reunionPrivadaActiva,
+    sorteoCopaActivo,
+    sorteoCampeonesGruposVisto,
+    sorteoCampeonesCuartosVisto,
+    sorteoEuropaGruposVisto,
+    sorteoEuropaCuartosVisto,
+    recordsClub,
+    feedHinchada
+  ]);
+
+  // Obtener si un equipo está bajo el Modo Presión en las últimas 5 jornadas
+  const obtenerModoPresionEquipo = useCallback((equipoId: string, jornadaNumero: number): boolean => {
+    const totalJornadas = fixture.length;
+    if (totalJornadas - jornadaNumero >= 5) {
+      return false;
+    }
+
+    const tablaOrdenada = [...liga.tabla].sort((a, b) => {
+      if (b.puntos !== a.puntos) return b.puntos - a.puntos;
+      if (b.diferenciaGoles !== a.diferenciaGoles) return b.diferenciaGoles - a.diferenciaGoles;
+      return b.golesFavor - a.golesFavor;
+    });
+
+    const equipoIndex = tablaOrdenada.findIndex(t => t.idEquipo === equipoId);
+    if (equipoIndex === -1) return false;
+
+    const N = tablaOrdenada.length;
+    if (N === 0) return false;
+
+    const equipoPuntos = tablaOrdenada[equipoIndex].puntos;
+    const primerPuntos = tablaOrdenada[0].puntos;
+    const cercaCampeon = (primerPuntos - equipoPuntos) <= 3;
+
+    const indexDescenso = Math.max(0, N - 3);
+    const enDescenso = equipoIndex >= indexDescenso;
+    const cercaDescenso = enDescenso || (equipoPuntos - tablaOrdenada[indexDescenso].puntos <= 3);
+
+    return cercaCampeon || cercaDescenso;
+  }, [liga.tabla, fixture.length]);
 
   // ============================================================
   // GENERAR FEED DE LA HINCHADA
@@ -1745,47 +1921,80 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   // Procesar finanzas semanales al finalizar cada semana (lunes)
   const procesarFinanzasSemanales = useCallback((nuevosJugadores: Jugador[], nuevasNoticias: string[]) => {
-    if (!equipoUsuarioId) return;
+    let crisisDetectada: { clubId: string; clubNombre: string; clubEscudo: string; jugadoresIds: string[] } | null = null;
 
     setEquipos(prevEquipos => {
-      const clubIndex = prevEquipos.findIndex(e => e.id === equipoUsuarioId);
-      if (clubIndex === -1) return prevEquipos;
-
-      const club = prevEquipos[clubIndex];
-      // Egresos: Sueldos semanales del plantel
-      const plantelUsuario = nuevosJugadores.filter(j => j.idEquipo === equipoUsuarioId);
-      const egresosSueldos = plantelUsuario.reduce((sum, j) => sum + j.salarioSemanal, 0);
-
-      // Ingresos: Sponsors semanales = (Reputación * 150000) / 4
-      const ingresosSponsors = Math.round((club.reputacion * 150000) / 4);
-      const totalIngresos = ingresosSponsors;
-
-      const balanceSemanal = totalIngresos - egresosSueldos;
-      const nuevoPresupuesto = club.presupuestoFichajes + balanceSemanal;
-
-      // Generar noticia
       const formatearEuros = (val: number) => {
         return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(val);
       };
-      const balanceTexto = balanceSemanal >= 0
-        ? `🟢 Superávit de ${formatearEuros(balanceSemanal)}`
-        : `🔴 Déficit de ${formatearEuros(Math.abs(balanceSemanal))}`;
 
-      const quiebraAlerta = nuevoPresupuesto < 0
-        ? ` ⚠️ ¡ALERTA FINANCIERA! Presupuesto en negativo. Evitá terminar el mes en quiebra para no ser despedido.`
-        : '';
+      return prevEquipos.map(club => {
+        // Egresos: Sueldos semanales de este plantel
+        const clubPlayers = nuevosJugadores.filter(j => j.idEquipo === club.id);
+        const egresosSueldos = clubPlayers.reduce((sum, j) => sum + j.salarioSemanal, 0);
 
-      nuevasNoticias.unshift(
-        `📊 [Balance Financiero Semanal] Sponsors: +${formatearEuros(ingresosSponsors)} | Sueldos Plantel: -${formatearEuros(egresosSueldos)} | Resultado: ${balanceTexto}.${quiebraAlerta}`
-      );
+        // Ingresos: Sponsors semanales
+        const ingresosSponsors = Math.round((club.reputacion * 150000) / 4);
 
-      const nuevosEquipos = [...prevEquipos];
-      nuevosEquipos[clubIndex] = {
-        ...club,
-        presupuestoFichajes: nuevoPresupuesto
-      };
-      return nuevosEquipos;
+        // Actualizar acumuladores FFP para todos los clubes
+        const ffpSueldos = (club.ffpSueldosGastados || 0) + egresosSueldos;
+        const ffpIngresos = (club.ffpIngresosTotales || 0) + ingresosSponsors;
+
+        const balanceSemanal = ingresosSponsors - egresosSueldos;
+        const nuevoPresupuesto = club.presupuestoFichajes + balanceSemanal;
+
+        // Si el balance de un club de la IA llega a valores negativos extremos (< -15.000.000)
+        let enCrisis = club.enCrisisAcreedores || false;
+        if (club.id !== equipoUsuarioId && nuevoPresupuesto < -15000000 && !enCrisis) {
+          enCrisis = true;
+          // Buscar las 3 figuras con mayor CA
+          const figuras = nuevosJugadores
+            .filter(j => j.idEquipo === club.id)
+            .sort((a, b) => b.ca - a.ca)
+            .slice(0, 3);
+          
+          if (figuras.length > 0) {
+            crisisDetectada = {
+              clubId: club.id,
+              clubNombre: club.nombre,
+              clubEscudo: club.escudo,
+              jugadoresIds: figuras.map(f => f.id)
+            };
+            
+            nuevasNoticias.unshift(
+              `💥 [CRISIS TOTAL] ¡El ${club.nombre} entra en concurso de acreedores! Debido a una deuda de ${formatearEuros(Math.abs(nuevoPresupuesto))}, la federación lo obliga a vender a sus 3 figuras con un 50% de descuento.`
+            );
+          }
+        }
+
+        // Para el usuario, generar noticia detallada y alerta de quiebra
+        if (club.id === equipoUsuarioId) {
+          const balanceTexto = balanceSemanal >= 0
+            ? `🟢 Superávit de ${formatearEuros(balanceSemanal)}`
+            : `🔴 Déficit de ${formatearEuros(Math.abs(balanceSemanal))}`;
+
+          const quiebraAlerta = nuevoPresupuesto < 0
+            ? ` ⚠️ ¡ALERTA FINANCIERA! Presupuesto en negativo. Evitá terminar el mes en quiebra para no ser despedido.`
+            : '';
+
+          nuevasNoticias.unshift(
+            `📊 [Balance Financiero Semanal] Sponsors: +${formatearEuros(ingresosSponsors)} | Sueldos Plantel: -${formatearEuros(egresosSueldos)} | Resultado: ${balanceTexto}.${quiebraAlerta}`
+          );
+        }
+
+        return {
+          ...club,
+          presupuestoFichajes: nuevoPresupuesto,
+          ffpSueldosGastados: ffpSueldos,
+          ffpIngresosTotales: ffpIngresos,
+          enCrisisAcreedores: enCrisis
+        };
+      });
     });
+
+    if (crisisDetectada) {
+      setSubastaCrisis(crisisDetectada);
+    }
   }, [equipoUsuarioId]);
 
   // Intentar generar oferta de transferencia por parte de la IA
@@ -1882,10 +2091,12 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     // Iteramos por cada club IA
     clubesIA.forEach(club => {
+      const clubActualizado = nuevosEquipos.find(e => e.id === club.id)!;
+      if (clubActualizado.ffpPenalizado) return; // IA sancionada no puede fichar con coste
+      
       // 2. Probabilidad del 3% diario para que este club intente un fichaje
       if (Math.random() > 0.03) return;
 
-      const clubActualizado = nuevosEquipos.find(e => e.id === club.id)!;
       const clubPlayers = nuevosJugadores.filter(j => j.idEquipo === club.id);
       if (clubPlayers.length === 0) return;
 
@@ -1967,13 +2178,21 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
         if (clubActualizado.presupuestoFichajes >= precioTraspaso) {
           // --- REALIZAR TRASPASO EN SEGUNDO PLANO ---
-          // 1. Actualizar presupuestos de fichajes de ambos clubes
+          // 1. Actualizar presupuestos de fichajes de ambos clubes e ingresos/gastos FFP
           nuevosEquipos = nuevosEquipos.map(e => {
             if (e.id === clubActualizado.id) {
-              return { ...e, presupuestoFichajes: e.presupuestoFichajes - precioTraspaso };
+              return {
+                ...e,
+                presupuestoFichajes: e.presupuestoFichajes - precioTraspaso,
+                ffpFichajesGastados: (e.ffpFichajesGastados || 0) + precioTraspaso
+              };
             }
             if (e.id === clubVendedor.id) {
-              return { ...e, presupuestoFichajes: e.presupuestoFichajes + precioTraspaso };
+              return {
+                ...e,
+                presupuestoFichajes: e.presupuestoFichajes + precioTraspaso,
+                ffpIngresosTotales: (e.ffpIngresosTotales || 0) + precioTraspaso
+              };
             }
             return e;
           });
@@ -2286,7 +2505,11 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setEquipos(prevEquipos =>
           prevEquipos.map(e => {
             if (recaudacionesCopa[e.id]) {
-              return { ...e, presupuestoFichajes: e.presupuestoFichajes + recaudacionesCopa[e.id] };
+              return { 
+                ...e, 
+                presupuestoFichajes: e.presupuestoFichajes + recaudacionesCopa[e.id],
+                ffpIngresosTotales: (e.ffpIngresosTotales || 0) + recaudacionesCopa[e.id]
+              };
             }
             return e;
           })
@@ -2363,7 +2586,11 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
         const finalEquiposConCopa = finalEquipos.map(e => {
           if (recaudacionesCopa[e.id]) {
-            return { ...e, presupuestoFichajes: e.presupuestoFichajes + recaudacionesCopa[e.id] };
+            return { 
+              ...e, 
+              presupuestoFichajes: e.presupuestoFichajes + recaudacionesCopa[e.id],
+              ffpIngresosTotales: (e.ffpIngresosTotales || 0) + recaudacionesCopa[e.id]
+            };
           }
           return e;
         });
@@ -2400,6 +2627,18 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const jornadaHoy = fixture.find(j => j.fecha === fechaActual);
 
     if (jornadaHoy) {
+      // Alerta de ansiedad ante la recta final en Modo Presión
+      if (equipoUsuarioId) {
+        const usuarioBajoPresion = obtenerModoPresionEquipo(equipoUsuarioId, jornadaHoy.numero);
+        if (usuarioBajoPresion) {
+          const nombreClub = equipos.find(e => e.id === equipoUsuarioId)?.nombre || '';
+          const titularNoticia = `😰 [Ansiedad en el Vestuario] El vestuario de ${nombreClub} muestra signos de ansiedad ante la recta final y la alta presión de los partidos decisivos.`;
+          if (!noticias.includes(titularNoticia)) {
+            setNoticias(prev => [titularNoticia, ...prev]);
+          }
+        }
+      }
+
       // Buscar si el usuario juega hoy
       const partUsuarioFixture = jornadaHoy.partidos.find(p => p.localId === equipoUsuarioId || p.visitanteId === equipoUsuarioId);
 
@@ -2423,7 +2662,9 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
           const lObj = equipos.find(e => e.id === partido.localId)!;
           const vObj = equipos.find(e => e.id === partido.visitanteId)!;
-          const res = simularPartido(lObj, vObj, jugadores);
+          const presionLocal = obtenerModoPresionEquipo(partido.localId, jornadaHoy.numero);
+          const presionVisitante = obtenerModoPresionEquipo(partido.visitanteId, jornadaHoy.numero);
+          const res = simularPartido(lObj, vObj, jugadores, undefined, presionLocal, presionVisitante);
 
           // Calcular taquilla
           const { recaudacion } = calcularRecaudacionTaquilla(lObj);
@@ -2460,7 +2701,11 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setEquipos(prevEquipos =>
           prevEquipos.map(e => {
             if (recaudacionesAI[e.id]) {
-              return { ...e, presupuestoFichajes: e.presupuestoFichajes + recaudacionesAI[e.id] };
+              return { 
+                ...e, 
+                presupuestoFichajes: e.presupuestoFichajes + recaudacionesAI[e.id],
+                ffpIngresosTotales: (e.ffpIngresosTotales || 0) + recaudacionesAI[e.id]
+              };
             }
             return e;
           })
@@ -2515,7 +2760,9 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         jornadaHoy.partidos.forEach(partido => {
           const lObj = equipos.find(e => e.id === partido.localId)!;
           const vObj = equipos.find(e => e.id === partido.visitanteId)!;
-          const res = simularPartido(lObj, vObj, jugadores);
+          const presionLocal = obtenerModoPresionEquipo(partido.localId, jornadaHoy.numero);
+          const presionVisitante = obtenerModoPresionEquipo(partido.visitanteId, jornadaHoy.numero);
+          const res = simularPartido(lObj, vObj, jugadores, undefined, presionLocal, presionVisitante);
 
           // Calcular taquilla
           const { recaudacion } = calcularRecaudacionTaquilla(lObj);
@@ -2552,7 +2799,11 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setEquipos(prevEquipos =>
           prevEquipos.map(e => {
             if (recaudacionesAI[e.id]) {
-              return { ...e, presupuestoFichajes: e.presupuestoFichajes + recaudacionesAI[e.id] };
+              return { 
+                ...e, 
+                presupuestoFichajes: e.presupuestoFichajes + recaudacionesAI[e.id],
+                ffpIngresosTotales: (e.ffpIngresosTotales || 0) + recaudacionesAI[e.id]
+              };
             }
             return e;
           })
@@ -2777,14 +3028,22 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const clubUsuario = equipos.find(e => e.id === equipoUsuarioId);
     if (!clubUsuario) return { aceptado: false, mensaje: 'Error al encontrar tu club.' };
 
+    if (clubUsuario.ffpPenalizado) {
+      return { aceptado: false, mensaje: 'Tu club está sancionado por el Fair Play Financiero y tiene prohibido realizar incorporaciones con coste en Deadline Day.' };
+    }
+
     if (clubUsuario.presupuestoFichajes < agente.valorDescuento) {
       return { aceptado: false, mensaje: `Presupuesto insuficiente. Necesitás ${formatearMoneda(agente.valorDescuento)} y tenés ${formatearMoneda(clubUsuario.presupuestoFichajes)}.` };
     }
 
-    // Descontar presupuesto
+    // Descontar presupuesto y acumular gastos FFP
     setEquipos(prev => prev.map(e =>
       e.id === equipoUsuarioId
-        ? { ...e, presupuestoFichajes: e.presupuestoFichajes - agente.valorDescuento }
+        ? { 
+            ...e, 
+            presupuestoFichajes: e.presupuestoFichajes - agente.valorDescuento,
+            ffpFichajesGastados: (e.ffpFichajesGastados || 0) + agente.valorDescuento
+          }
         : e
     ));
 
@@ -3070,6 +3329,11 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const playersWithTitular = jugadoresIniciales.map(j => ({
       ...j,
       titular: false,
+      manejoPresion: j.manejoPresion !== undefined ? j.manejoPresion : (
+        (j.id === 'haaland' || j.nombre.includes('Mbappé') || j.nombre.includes('Mbappe') || j.ca >= 85)
+          ? randomRange(18, 20)
+          : (j.edad < 20 ? randomRange(8, 12) : randomRange(1, 20))
+      ),
       mesesContrato: j.mesesContrato !== undefined ? j.mesesContrato : Math.floor(Math.random() * 25) + 6,
       rasgos: j.rasgos || generarRasgosAleatorios(j.posicion),
       golesHistoricos: j.goles || 0,
@@ -3119,6 +3383,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setSorteoCampeonesCuartosVisto(false);
     setSorteoEuropaCuartosVisto(false);
     setJuegoIniciado(false);
+    setSubastaCrisis(null);
   }, []);
 
   // Cambiar estado de titularidad de un jugador
@@ -3215,11 +3480,37 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       return false;
     };
 
+    if (clubUsuario.ffpPenalizado) {
+      if (!esLibre) {
+        return { aceptado: false, mensaje: 'Tu club está sancionado por el Fair Play Financiero y tiene prohibido comprar jugadores bajo contrato.' };
+      }
+      if (oferta > 0) {
+        return { aceptado: false, mensaje: 'Tu club está sancionado por el Fair Play Financiero y solo puede fichar agentes libres a coste cero.' };
+      }
+    }
+
     let aceptado = false;
     let mensaje = '';
     const ratio = oferta / jugador.valorMercado;
 
-    if (esLibre) {
+    const esDeSubasta = !!(subastaCrisis && subastaCrisis.jugadoresIds.includes(jugadorId));
+
+    if (esDeSubasta) {
+      if (oferta >= Math.round(jugador.valorMercado * 0.5)) {
+        aceptado = true;
+        mensaje = `¡Fichaje de Quiebra! El ${clubUsuario.nombre} aprovecha la crisis del ${clubAnterior?.nombre || 'club anterior'} y adquiere a su figura ${jugador.nombre} con un 50% de descuento por ${formatearMoneda(oferta)}.`;
+      } else {
+        aceptado = false;
+        mensaje = `La oferta fue rechazada. El administrador de la quiebra del ${clubAnterior?.nombre || 'club anterior'} exige al menos el 50% del valor de mercado (${formatearMoneda(Math.round(jugador.valorMercado * 0.5))}).`;
+      }
+    } else if (clubUsuario.ffpPenalizado && esLibre) {
+      if (oferta === 0) {
+        aceptado = true;
+        mensaje = `¡Fichaje Completado! ${jugador.nombre} ha aceptado unirse al ${clubUsuario.nombre} como Agente Libre a coste cero bajo la regla de excepción de Fair Play Financiero.`;
+      } else {
+        return { aceptado: false, mensaje: 'Tu club está sancionado por el Fair Play Financiero y solo puede fichar agentes libres a coste cero.' };
+      }
+    } else if (esLibre) {
       // Reglas para agentes libres
       if (ratio >= 0.85) {
         aceptado = true;
@@ -3289,31 +3580,66 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
 
     if (aceptado) {
-      // 1. Restar el dinero del presupuesto del usuario y sumarlo al del club vendedor
+      // 1. Restar el dinero del presupuesto del usuario y sumarlo al del club vendedor (y acumular FFP)
       setEquipos(prevEquipos =>
         prevEquipos.map(e => {
           if (e.id === equipoUsuarioId) {
-            return { ...e, presupuestoFichajes: e.presupuestoFichajes - oferta };
+            return { 
+              ...e, 
+              presupuestoFichajes: e.presupuestoFichajes - oferta,
+              ffpFichajesGastados: (e.ffpFichajesGastados || 0) + oferta
+            };
           }
           if (clubAnterior && e.id === clubAnterior.id) {
-            return { ...e, presupuestoFichajes: e.presupuestoFichajes + oferta };
+            return { 
+              ...e, 
+              presupuestoFichajes: e.presupuestoFichajes + oferta,
+              ffpIngresosTotales: (e.ffpIngresosTotales || 0) + oferta
+            };
           }
           return e;
         })
       );
 
-      // 2. Re-mapear el club del jugador comprado y aplicar la promesa
+      // Si el jugador provenía de la subasta de quiebra, lo removemos de ella
+      if (esDeSubasta) {
+        setSubastaCrisis(prev => {
+          if (!prev) return null;
+          const filtered = prev.jugadoresIds.filter(id => id !== jugadorId);
+          if (filtered.length === 0) return null;
+          return { ...prev, jugadoresIds: filtered };
+        });
+      }
+
+      // 2. Re-mapear el club del jugador comprado, aplicar descuento si tiene un amigo y aplicar la promesa
+      const tieneAmigoEnPlantel = jugador.idAmigos?.some(friendId => 
+        jugadores.some(pj => pj.id === friendId && pj.idEquipo === equipoUsuarioId)
+      );
+      const salarioFinal = tieneAmigoEnPlantel 
+        ? Math.round(jugador.salarioSemanal * 0.85) 
+        : jugador.salarioSemanal;
+
       setJugadores(prevJugadores =>
         prevJugadores.map(j =>
           j.id === jugadorId
-            ? { ...j, idEquipo: equipoUsuarioId, titular: false, promesas: promesa ? [promesa] : (j.promesas || []), clausulaRescision: clausulaRescision ?? j.clausulaRescision }
+            ? { 
+                ...j, 
+                idEquipo: equipoUsuarioId, 
+                titular: false, 
+                salarioSemanal: salarioFinal,
+                promesas: promesa ? [promesa] : (j.promesas || []), 
+                clausulaRescision: clausulaRescision ?? j.clausulaRescision 
+              }
             : j
         )
       );
 
       // Agregar a las noticias
+      const descAdicional = tieneAmigoEnPlantel 
+        ? ` (¡Redujo su salario un 15% a ${formatearMoneda(salarioFinal)}/sem para jugar con su amigo!)`
+        : "";
       setNoticias(prev => [
-        `🤝 [Fichaje] ¡Acuerdo cerrado! El ${clubUsuario.nombre} adquiere los derechos de ${jugador.nombre} ${clubAnterior ? `procedente del ${clubAnterior.nombre}` : 'como Agente Libre'} por la cifra de ${formatearMoneda(oferta)}.`,
+        `🤝 [Fichaje] ¡Acuerdo cerrado! El ${clubUsuario.nombre} adquiere los derechos de ${jugador.nombre} ${clubAnterior ? `procedente del ${clubAnterior.nombre}` : 'como Agente Libre'} por la cifra de ${formatearMoneda(oferta)}${descAdicional}.`,
         ...prev
       ]);
 
@@ -3321,7 +3647,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
 
     return { aceptado, mensaje };
-  }, [jugadores, equipos, equipoUsuarioId, generarFeedHinchada]);
+  }, [jugadores, equipos, equipoUsuarioId, generarFeedHinchada, subastaCrisis, setSubastaCrisis]);
 
   // Renovar contrato de un jugador
   const renovarContrato = useCallback((jugadorId: string, nuevoSalario: number, clausulaRescision?: number) => {
@@ -3417,13 +3743,25 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     const { jugadorId, jugadorNombre, clubCompradorId, clubCompradorNombre, montoOfrecido } = ofertaRecibidaActiva;
 
-    // 1. Sumar el monto al presupuesto de fichajes
+    // 1. Sumar el monto al presupuesto de fichajes (y registrar FFP para vendedor y comprador)
     setEquipos(prevEquipos =>
-      prevEquipos.map(e =>
-        e.id === equipoUsuarioId
-          ? { ...e, presupuestoFichajes: e.presupuestoFichajes + montoOfrecido }
-          : e
-      )
+      prevEquipos.map(e => {
+        if (e.id === equipoUsuarioId) {
+          return { 
+            ...e, 
+            presupuestoFichajes: e.presupuestoFichajes + montoOfrecido,
+            ffpIngresosTotales: (e.ffpIngresosTotales || 0) + montoOfrecido
+          };
+        }
+        if (e.id === clubCompradorId) {
+          return {
+            ...e,
+            presupuestoFichajes: e.presupuestoFichajes - montoOfrecido,
+            ffpFichajesGastados: (e.ffpFichajesGastados || 0) + montoOfrecido
+          };
+        }
+        return e;
+      })
     );
 
     // 2. Transferir el jugador
@@ -3555,7 +3893,11 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setEquipos(prevEquipos =>
       prevEquipos.map(e => {
         if (e.id === local.id) {
-          return { ...e, presupuestoFichajes: e.presupuestoFichajes + recaudacion };
+          return { 
+            ...e, 
+            presupuestoFichajes: e.presupuestoFichajes + recaudacion,
+            ffpIngresosTotales: (e.ffpIngresosTotales || 0) + recaudacion
+          };
         }
         return e;
       })
@@ -3861,7 +4203,99 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setRecordsClub(recordModificado);
     }
 
-    setJugadores(jugadoresProcesadosConHistorico);
+    // --- ACTUALIZAR QUÍMICA POSICIONAL Y AFINIDADES (INTERCAMBIO DE CAMISETAS) ---
+    let jugadoresFinalesDeMatch = [...jugadoresProcesadosConHistorico];
+    
+    // A. Actualizar Química Posicional
+    jugadoresFinalesDeMatch = jugadoresFinalesDeMatch.map(j => {
+      if (j.idEquipo !== equipoUsuarioId) return j;
+
+      const quimica = { ...(j.quimicaPosicional || {}) };
+      const isStarter = j.titular && j.posicionTactica;
+
+      jugadoresProcesadosConHistorico.forEach(other => {
+        if (other.idEquipo !== equipoUsuarioId || other.id === j.id) return;
+
+        const otherIsStarter = other.titular && other.posicionTactica;
+
+        if (isStarter && otherIsStarter) {
+          const lineA = j.posicionTactica!.split('-')[0];
+          const lineB = other.posicionTactica!.split('-')[0];
+
+          if (lineA === lineB && lineA !== 'POR') {
+            quimica[other.id] = (quimica[other.id] || 0) + 1;
+          } else {
+            quimica[other.id] = 0;
+          }
+        } else {
+          quimica[other.id] = 0;
+        }
+      });
+
+      return {
+        ...j,
+        quimicaPosicional: quimica
+      };
+    });
+
+    // B. Intercambio de Camisetas en Partidos de Alta Tensión
+    const esCopaDeMatch = partidoEnVivo.tipo === 'copa';
+    const activeCopaDeMatch = esCopaDeMatch ? (partidoEnVivo.subtipo === 'champions' ? copaCampeones : copaEuropa) : null;
+    const esFinalCopa = esCopaDeMatch && activeCopaDeMatch?.faseActual === 'final';
+
+    const clasicosIds = [
+      ['real-madrid', 'barcelona'],
+      ['real-madrid', 'atletico-madrid'],
+      ['barcelona', 'atletico-madrid'],
+      ['man-united', 'man-city'],
+      ['man-united', 'liverpool'],
+      ['arsenal', 'chelsea'],
+      ['ac-milan', 'inter-milan'],
+      ['juventus', 'inter-milan'],
+      ['juventus', 'ac-milan'],
+      ['bayern-munich', 'borussia-dortmund'],
+      ['boca-juniors', 'river-plate']
+    ];
+
+    const localId = local.id;
+    const visitanteId = visitante.id;
+    const esClasicoAltaTension = clasicosIds.some(pair => 
+      (localId.toLowerCase().includes(pair[0]) && visitanteId.toLowerCase().includes(pair[1])) ||
+      (visitanteId.toLowerCase().includes(pair[0]) && localId.toLowerCase().includes(pair[1]))
+    );
+
+    if (esFinalCopa || esClasicoAltaTension) {
+      const userStar = [...jugadoresFinalesDeMatch]
+        .filter(j => j.idEquipo === equipoUsuarioId && j.titular)
+        .sort((a, b) => b.ca - a.ca)[0];
+
+      const rivalEquipoId = esLocalUsuario ? visitante.id : local.id;
+      const rivalStar = [...jugadoresFinalesDeMatch]
+        .filter(j => j.idEquipo === rivalEquipoId && j.titular)
+        .sort((a, b) => b.ca - a.ca)[0];
+
+      if (userStar && rivalStar) {
+        const userFriends = [...(userStar.idAmigos || [])];
+        if (!userFriends.includes(rivalStar.id)) userFriends.push(rivalStar.id);
+
+        const rivalFriends = [...(rivalStar.idAmigos || [])];
+        if (!rivalFriends.includes(userStar.id)) rivalFriends.push(userStar.id);
+
+        jugadoresFinalesDeMatch = jugadoresFinalesDeMatch.map(j => {
+          if (j.id === userStar.id) return { ...j, idAmigos: userFriends };
+          if (j.id === rivalStar.id) return { ...j, idAmigos: rivalFriends };
+          return j;
+        });
+
+        const tensionTipo = esFinalCopa ? 'la Gran Final' : 'el Clásico';
+        const msgSwap = `👕 [Intercambio de Camisetas] Tras la enorme tensión en ${tensionTipo}, la figura del equipo, ${userStar.nombre}, intercambió camiseta con la estrella del ${esLocalUsuario ? visitante.nombre : local.nombre}, ${rivalStar.nombre}, forjando una gran relación de respeto y afinidad.`;
+        
+        noticiasVestuario.push(msgSwap);
+        eventos.push(`👕 [Intercambio de Camisetas] ${userStar.nombre} y ${rivalStar.nombre} intercambiaron camisetas al finalizar el encuentro.`);
+      }
+    }
+
+    setJugadores(jugadoresFinalesDeMatch);
     if (proximaCharla) {
       setCharlaActiva(proximaCharla);
     }
@@ -4370,19 +4804,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
     });
 
-    // Resetear Tabla de Posiciones
-    const tablaReseteada = liga.tabla.map(t => ({
-      ...t,
-      partidosJugados: 0,
-      ganados: 0,
-      empatados: 0,
-      perdidos: 0,
-      golesFavor: 0,
-      golesContra: 0,
-      diferenciaGoles: 0,
-      puntos: 0,
-      forma: []
-    }));
+
 
     // Siguiente temporada
     const partes = liga.temporada.split('/');
@@ -4532,7 +4954,83 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const { equiposActualizados: equiposFinTutorias, jugadoresActualizados: jugadoresFinTutorias, noticiasTutorias: noticiasFinTutorias } =
       procesarPasoDelDiaTutorias(equiposActualizados, jugadoresFinalesProcesados, equipoUsuarioId, 60);
 
-    setEquipos(equiposFinTutorias);
+    // --- EVALUACIÓN GLOBAL DEL FAIR PLAY FINANCIERO (FFP) ---
+    const noticiasFFP: string[] = [];
+    const equiposConFFP = equiposFinTutorias.map(eq => {
+      const gastos = (eq.ffpSueldosGastados || 0) + (eq.ffpFichajesGastados || 0);
+      const ingresos = eq.ffpIngresosTotales || 0;
+      const limite = ingresos * 0.8;
+      
+      let warnings = eq.ffpAdvertenciasConsecutivas || 0;
+      let penalizado = eq.ffpPenalizado || false;
+      let sancionPuntosPendiente = eq.ffpSancionPuntosPendiente || false;
+
+      if (gastos > limite) {
+        warnings += 1;
+        if (warnings >= 2) {
+          penalizado = true;
+          sancionPuntosPendiente = true;
+          if (eq.id === equipoUsuarioId) {
+            noticiasFFP.push(
+              `❌ [FFP - SANCIÓN] ¡Sanción de Fair Play Financiero para tu club! Has excedido el 80% de gastos (${formatearMoneda(gastos)} gastados vs ${formatearMoneda(ingresos)} ingresados) por dos temporadas consecutivas. Comenzarás la nueva temporada con -9 puntos y no podrás comprar jugadores contratados.`
+            );
+          } else {
+            noticiasFFP.push(
+              `❌ [FFP - SANCIÓN] ¡Sanción para el ${eq.nombre}! Ha sido sancionado con -9 puntos y prohibición de compras por incumplir el Fair Play Financiero por segunda temporada consecutiva.`
+            );
+          }
+        } else {
+          if (eq.id === equipoUsuarioId) {
+            noticiasFFP.push(
+              `⚠️ [FFP - ALERTA] Tu club ha gastado más del 80% de sus ingresos esta temporada (${formatearMoneda(gastos)} gastados vs ${formatearMoneda(ingresos)} ingresados). Recibís una Alerta de Sanción (Advertencias: 1/2). Cuidá tus finanzas el próximo año para evitar sanciones.`
+            );
+          } else {
+            noticiasFFP.push(
+              `⚠️ [FFP] El ${eq.nombre} ha recibido una Alerta de Sanción por parte del Comité de Control Financiero por exceder el límite de gastos.`
+            );
+          }
+        }
+      } else {
+        warnings = 0;
+        penalizado = false;
+      }
+
+      return {
+        ...eq,
+        ffpSueldosGastados: 0,
+        ffpFichajesGastados: 0,
+        ffpIngresosTotales: 0,
+        ffpAdvertenciasConsecutivas: warnings,
+        ffpPenalizado: penalizado,
+        ffpSancionPuntosPendiente: sancionPuntosPendiente
+      };
+    });
+
+    // Resetear Tabla de Posiciones aplicando la sanción de puntos del FFP
+    const tablaReseteada = liga.tabla.map(t => {
+      const club = equiposConFFP.find(e => e.id === t.idEquipo);
+      const tieneSancionPuntos = club?.ffpSancionPuntosPendiente || false;
+      return {
+        ...t,
+        partidosJugados: 0,
+        ganados: 0,
+        empatados: 0,
+        perdidos: 0,
+        golesFavor: 0,
+        golesContra: 0,
+        diferenciaGoles: 0,
+        puntos: tieneSancionPuntos ? -9 : 0,
+        forma: []
+      };
+    });
+
+    // Limpiar flag temporal de puntos pendientes para la nueva temporada
+    const equiposFinTemporadaList = equiposConFFP.map(eq => ({
+      ...eq,
+      ffpSancionPuntosPendiente: false
+    }));
+
+    setEquipos(equiposFinTemporadaList);
     setJugadores(jugadoresFinTutorias);
     setFixture(nuevoFixture);
     setLiga(prevLiga => ({
@@ -4547,6 +5045,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setSorteoEuropaGruposVisto(false);
     setSorteoCampeonesCuartosVisto(false);
     setSorteoEuropaCuartosVisto(false);
+    setSubastaCrisis(null); // Resetear subasta al finalizar temporada
 
     setReporteAcademia({
       retirados: retiradosList,
@@ -4560,7 +5059,8 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       `📦 [Academia] Se ha publicado el Informe de la Academia con las nuevas promesas de la cantera.`,
       `🏆 [Copas Internacionales] Se han sorteado los fixtures de la Copa de Campeones y la Copa Continental para la nueva temporada.`,
       ...noticiasCopaRota,
-      ...noticiasFinTutorias
+      ...noticiasFinTutorias,
+      ...noticiasFFP
     ];
 
     setNoticias(prev => [...nuevasNoticiasCierre, ...prev]);
@@ -5030,18 +5530,32 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (!v.mesesContrato || v.mesesContrato > 6) return { aceptado: false, mensaje: "Este jugador tiene más de 6 meses de contrato y no se puede negociar libremente." };
 
     const F = equipos.find(k => k.id === equipoUsuarioId)!;
-    const minSalary = Math.max(v.salarioSemanal * 1.15, Math.round(v.ca ** 2 * 35));
+    if (F.ffpPenalizado) {
+      return { aceptado: false, mensaje: "Tu club está sancionado por el Fair Play Financiero y tiene prohibido negociar precontratos Bosman." };
+    }
+    
+    // --- DESCUENTO POR AFINIDAD (AMIGO EN EL PLANTEL) ---
+    let minSalary = Math.max(v.salarioSemanal * 1.15, Math.round(v.ca ** 2 * 35));
+    const tieneAmigoEnPlantel = v.idAmigos?.some(friendId => 
+      jugadores.some(j => j.id === friendId && j.idEquipo === equipoUsuarioId)
+    );
+    if (tieneAmigoEnPlantel) {
+      minSalary = Math.round(minSalary * 0.85);
+    }
+
     let ok = false;
     let msg = "";
 
     if (salarioSemanal >= minSalary) {
       ok = true;
-      msg = `¡Preacuerdo Firmado! ${v.nombre} ha aceptado tus términos de contrato (${formatearMoneda(salarioSemanal)}/sem y cláusula de ${clausulaRescision ? formatearMoneda(clausulaRescision) : 'Sin cláusula'}). Se unirá al ${F.nombre} libre de contrato el 1 de Julio.`;
+      const descAdicional = tieneAmigoEnPlantel ? " (¡Aceptó un sueldo 15% menor para reunirse con su socio!)" : "";
+      msg = `¡Preacuerdo Firmado! ${v.nombre} ha aceptado tus términos de contrato (${formatearMoneda(salarioSemanal)}/sem y cláusula de ${clausulaRescision ? formatearMoneda(clausulaRescision) : 'Sin cláusula'})${descAdicional}. Se unirá al ${F.nombre} libre de contrato el 1 de Julio.`;
       setJugadores(prev => prev.map(j => j.id === jugadorId ? { ...j, preacuerdoClubId: equipoUsuarioId, preacuerdoSalario: salarioSemanal, preacuerdoClausula: clausulaRescision } : j));
       setNoticias(prev => [`🤝 [Preacuerdo Bosman] ¡Acuerdo para la próxima temporada! El mánager del ${F.nombre} ha cerrado la incorporación libre de ${v.nombre} para el próximo 1 de Julio.`, ...prev]);
     } else {
       ok = false;
-      msg = `Rechazado. El representante de ${v.nombre} exige un salario semanal de al menos ${formatearMoneda(minSalary)}/sem.`;
+      const descAdicional = tieneAmigoEnPlantel ? " (ya incluye un 15% de rebaja por afinidad)" : "";
+      msg = `Rechazado. El representante de ${v.nombre} exige un salario semanal de al menos ${formatearMoneda(minSalary)}/sem${descAdicional}.`;
     }
     return { aceptado: ok, mensaje: msg };
   }, [jugadores, equipos, equipoUsuarioId]);
@@ -5126,7 +5640,9 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         iniciarTutoria,
         recordsClub,
         recordModalActivo,
-        cerrarRecordModal
+        cerrarRecordModal,
+        obtenerModoPresionEquipo,
+        subastaCrisis
       }}
     >
       {children}

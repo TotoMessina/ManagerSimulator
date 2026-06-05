@@ -12,27 +12,27 @@ const obtenerAleatorio = <T>(arr: T[]): T => arr[Math.floor(Math.random() * arr.
 export const FORMACION_MAPA_SLOTS: Record<Formacion, Record<string, Posicion>> = {
   '4-3-3': {
     'POR-0': 'POR',
-    'DEF-0': 'LD',
+    'DEF-0': 'LI',
     'DEF-1': 'DFC',
     'DEF-2': 'DFC',
-    'DEF-3': 'LI',
+    'DEF-3': 'LD',
     'MED-0': 'MC',
     'MED-1': 'MCO',
     'MED-2': 'MC',
-    'DEL-0': 'ED',
+    'DEL-0': 'EI',
     'DEL-1': 'DC',
-    'DEL-2': 'EI'
+    'DEL-2': 'ED'
   },
   '4-4-2': {
     'POR-0': 'POR',
-    'DEF-0': 'LD',
+    'DEF-0': 'LI',
     'DEF-1': 'DFC',
     'DEF-2': 'DFC',
-    'DEF-3': 'LI',
-    'MED-0': 'ED',
+    'DEF-3': 'LD',
+    'MED-0': 'EI',
     'MED-1': 'MC',
     'MED-2': 'MC',
-    'MED-3': 'EI',
+    'MED-3': 'ED',
     'DEL-0': 'DC',
     'DEL-1': 'DC'
   },
@@ -41,21 +41,21 @@ export const FORMACION_MAPA_SLOTS: Record<Formacion, Record<string, Posicion>> =
     'DEF-0': 'DFC',
     'DEF-1': 'DFC',
     'DEF-2': 'DFC',
-    'MED-0': 'LD',
+    'MED-0': 'LI',
     'MED-1': 'MC',
     'MED-2': 'MCO',
     'MED-3': 'MC',
-    'MED-4': 'LI',
+    'MED-4': 'LD',
     'DEL-0': 'DC',
     'DEL-1': 'DC'
   },
   '5-3-2': {
     'POR-0': 'POR',
-    'DEF-0': 'LD',
+    'DEF-0': 'LI',
     'DEF-1': 'DFC',
     'DEF-2': 'DFC',
     'DEF-3': 'DFC',
-    'DEF-4': 'LI',
+    'DEF-4': 'LD',
     'MED-0': 'MC',
     'MED-1': 'MCO',
     'MED-2': 'MC',
@@ -226,7 +226,9 @@ export function simularPartido(
   local: Equipo,
   visitante: Equipo,
   jugadores: Jugador[],
-  climaParam?: 'Soleado' | 'Lluvia Torrencial' | 'Nieve'
+  climaParam?: 'Soleado' | 'Lluvia Torrencial' | 'Nieve',
+  presionLocal?: boolean,
+  presionVisitante?: boolean
 ): ResultadoPartido {
   const eventos: string[] = [];
   const clima = climaParam || 'Soleado';
@@ -303,6 +305,22 @@ export function simularPartido(
       atributosAjustados[key] = Math.max(1, Math.round(atributosAjustados[key] * comp));
     }
 
+    // --- QUÍMICA DE SOCIEDAD ---
+    const lineaActual = obtenerCategoriaPosicion(r.posicionAsignada);
+    const tieneQuimicaActiva = rolesLocal.some(otroRole => {
+      if (otroRole.jugador.id === j.id) return false;
+      const lineaOtro = obtenerCategoriaPosicion(otroRole.posicionAsignada);
+      if (lineaActual !== lineaOtro || lineaActual === 'POR') return false;
+      const q = j.quimicaPosicional?.[otroRole.jugador.id] || 0;
+      return q >= 5;
+    });
+
+    if (tieneQuimicaActiva) {
+      atributosAjustados.pase = Math.min(20, Math.round(atributosAjustados.pase * 1.10));
+      atributosAjustados.defensa = Math.min(20, Math.round(atributosAjustados.defensa * 1.10));
+      atributosAjustados.posicionamiento = Math.min(20, Math.round(atributosAjustados.posicionamiento * 1.10));
+    }
+
     // --- LOCALÍA ---
     // El equipo local recibe un bonus del +10% en sus atributos mentales (Moral y Determinación) debido al apoyo de la hinchada.
     atributosAjustados.determinacion = Math.min(20, Math.round(atributosAjustados.determinacion * 1.10));
@@ -324,6 +342,18 @@ export function simularPartido(
       atributosAjustados.fuerza = Math.min(20, Math.round(atributosAjustados.fuerza * 1.10));
     }
 
+    // --- MODO PRESIÓN ---
+    if (presionLocal) {
+      const mp = j.manejoPresion !== undefined ? j.manejoPresion : 10;
+      if (mp < 12) {
+        atributosAjustados.decisiones = Math.max(1, Math.round(atributosAjustados.decisiones * 0.85));
+        atributosAjustados.remate = Math.max(1, Math.round(atributosAjustados.remate * 0.85));
+      } else if (mp >= 16 || j.personalidad === 'Líder') {
+        atributosAjustados.decisiones = Math.min(20, Math.round(atributosAjustados.decisiones * 1.10));
+        atributosAjustados.remate = Math.min(20, Math.round(atributosAjustados.remate * 1.10));
+      }
+    }
+
     return { ...j, moral: moralConBonus, atributos: atributosAjustados };
   });
 
@@ -334,6 +364,22 @@ export function simularPartido(
     const atributosAjustados = { ...baseAttrs };
     for (const key of Object.keys(atributosAjustados) as (keyof AtributosJugador)[]) {
       atributosAjustados[key] = Math.max(1, Math.round(atributosAjustados[key] * comp));
+    }
+
+    // --- QUÍMICA DE SOCIEDAD ---
+    const lineaActual = obtenerCategoriaPosicion(r.posicionAsignada);
+    const tieneQuimicaActiva = rolesVisitante.some(otroRole => {
+      if (otroRole.jugador.id === j.id) return false;
+      const lineaOtro = obtenerCategoriaPosicion(otroRole.posicionAsignada);
+      if (lineaActual !== lineaOtro || lineaActual === 'POR') return false;
+      const q = j.quimicaPosicional?.[otroRole.jugador.id] || 0;
+      return q >= 5;
+    });
+
+    if (tieneQuimicaActiva) {
+      atributosAjustados.pase = Math.min(20, Math.round(atributosAjustados.pase * 1.10));
+      atributosAjustados.defensa = Math.min(20, Math.round(atributosAjustados.defensa * 1.10));
+      atributosAjustados.posicionamiento = Math.min(20, Math.round(atributosAjustados.posicionamiento * 1.10));
     }
 
     // --- LLUVIA TORRENCIAL ---
@@ -348,6 +394,18 @@ export function simularPartido(
         atributosAjustados.aceleracion = Math.max(1, Math.round(atributosAjustados.aceleracion * 0.85));
       }
       atributosAjustados.fuerza = Math.min(20, Math.round(atributosAjustados.fuerza * 1.10));
+    }
+
+    // --- MODO PRESIÓN ---
+    if (presionVisitante) {
+      const mp = j.manejoPresion !== undefined ? j.manejoPresion : 10;
+      if (mp < 12) {
+        atributosAjustados.decisiones = Math.max(1, Math.round(atributosAjustados.decisiones * 0.85));
+        atributosAjustados.remate = Math.max(1, Math.round(atributosAjustados.remate * 0.85));
+      } else if (mp >= 16 || j.personalidad === 'Líder') {
+        atributosAjustados.decisiones = Math.min(20, Math.round(atributosAjustados.decisiones * 1.10));
+        atributosAjustados.remate = Math.min(20, Math.round(atributosAjustados.remate * 1.10));
+      }
     }
 
     return { ...j, atributos: atributosAjustados };

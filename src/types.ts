@@ -120,6 +120,10 @@ export interface Jugador {
   golesHistoricos?: number;
   asistenciasHistoricos?: number;
   partidosHistoricos?: number;
+  idAmigos?: string[];
+  idRivales?: string[];
+  quimicaPosicional?: Record<string, number>;
+  manejoPresion?: number;
 }
 
 export type EstiloJuego = 'Ofensivo' | 'Defensivo' | 'Equilibrado';
@@ -167,6 +171,15 @@ export interface Equipo {
   nivelAcademiaJuvenil?: number; // 1 a 5
   proyectosConstruccion?: ProyectoConstruccion[];
   tutorias?: Tutoria[];
+
+  // --- FAIR PLAY FINANCIERO Y CRISIS ---
+  ffpSueldosGastados?: number;
+  ffpFichajesGastados?: number;
+  ffpIngresosTotales?: number;
+  ffpAdvertenciasConsecutivas?: number;
+  ffpPenalizado?: boolean;
+  ffpSancionPuntosPendiente?: boolean;
+  enCrisisAcreedores?: boolean;
 }
 
 export interface TablaEquipo {

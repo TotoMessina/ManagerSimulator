@@ -29,11 +29,21 @@ export const DashboardView: React.FC = () => {
     liga,
     finalizarTemporada,
     copaCampeones,
-    copaEuropa
+    copaEuropa,
+    subastaCrisis,
+    comprarJugador
   } = useGame();
 
   const totalPartidosTemporada = (liga.tabla.length - 1) * 2;
   const esFinDeTemporada = liga.tabla.length > 0 && liga.tabla[0].partidosJugados === totalPartidosTemporada;
+
+  // --- FIGURAS EN SUBASTA POR CRISIS ---
+  const jugadoresSubasta = React.useMemo(() => {
+    if (!subastaCrisis) return [];
+    return subastaCrisis.jugadoresIds
+      .map(id => jugadores.find(j => j.id === id))
+      .filter((j): j is typeof jugadores[number] => !!j);
+  }, [subastaCrisis, jugadores]);
 
   // --- DETECTAR PARTIDO DE COPA HOY ---
   let partidoCopaHoy: any = null;
@@ -558,6 +568,67 @@ export const DashboardView: React.FC = () => {
                           className="bg-gradient-to-r from-teal-500 to-emerald-500 h-full rounded-full transition-all duration-500" 
                           style={{ width: `${completadoPercent}%` }}
                         />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {subastaCrisis && jugadoresSubasta.length > 0 && (
+            <div className="bg-slate-900/60 border border-amber-500/30 rounded-2xl p-6 space-y-4 shadow-lg backdrop-blur-md border-t-4 border-t-amber-500 animate-fade-in text-left">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <span className="text-2xl">{subastaCrisis.clubEscudo}</span>
+                  <div>
+                    <span className="text-[10px] uppercase font-black text-amber-400 tracking-wider block">🚨 SUBASTA RELÁMPAGO POR QUIEBRA</span>
+                    <h3 className="text-base font-bold text-white mt-0.5">Liquidación de Plantel: {subastaCrisis.clubNombre}</h3>
+                  </div>
+                </div>
+                <div className="bg-amber-500/10 border border-amber-500/30 text-amber-350 text-[10px] uppercase font-bold px-3 py-1.5 rounded-lg font-mono">
+                  50% de Descuento
+                </div>
+              </div>
+
+              <p className="text-xs text-slate-350 leading-relaxed">
+                El club ha entrado en concurso de acreedores y la federación lo obliga a vender a sus figuras principales para saldar sus deudas. Ficha a estos jugadores estrella a mitad de su valor de mercado:
+              </p>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-2">
+                {jugadoresSubasta.map(jugador => {
+                  const precioDescuento = Math.round(jugador.valorMercado * 0.5);
+                  return (
+                    <div key={jugador.id} className="bg-slate-950/60 border border-slate-850 p-4 rounded-xl flex flex-col justify-between gap-3 shadow-inner">
+                      <div>
+                        <div className="flex justify-between items-start">
+                          <span className="text-[9px] font-extrabold px-1.5 py-0.5 bg-slate-905 border border-slate-800 rounded tracking-wide text-slate-400">
+                            {jugador.posicion}
+                          </span>
+                          <span className="text-xs font-mono font-bold text-teal-450">
+                            CA {jugador.ca}
+                          </span>
+                        </div>
+                        <h4 className="text-xs font-bold text-slate-200 mt-2 truncate">{jugador.nombre}</h4>
+                        <p className="text-[10px] text-slate-500 mt-0.5">{jugador.edad} años · {jugador.nacionalidad}</p>
+                      </div>
+
+                      <div className="border-t border-slate-900 pt-2.5 mt-1">
+                        <div className="flex justify-between items-center text-[10px]">
+                          <span className="text-slate-500 line-through">{formatearMoneda(jugador.valorMercado)}</span>
+                          <span className="text-amber-400 font-extrabold text-xs">{formatearMoneda(precioDescuento)}</span>
+                        </div>
+                        <button
+                          onClick={() => {
+                            if (window.confirm(`¿Querés fichar a ${jugador.nombre} por ${formatearMoneda(precioDescuento)}?`)) {
+                              const res = comprarJugador(jugador.id, precioDescuento);
+                              alert(res.mensaje);
+                            }
+                          }}
+                          className="w-full mt-2.5 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-lg text-[10px] uppercase tracking-wider transition-all active:scale-[0.97]"
+                        >
+                          Fichar
+                        </button>
                       </div>
                     </div>
                   );

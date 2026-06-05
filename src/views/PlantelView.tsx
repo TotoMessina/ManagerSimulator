@@ -492,6 +492,69 @@ export const PlantelView: React.FC = () => {
                   </div>
                 </div>
 
+                {/* Relaciones y Química Posicional */}
+                <div className="p-4 bg-slate-950 border-t border-slate-800 space-y-2 max-h-[160px] overflow-y-auto custom-scrollbar">
+                  <h4 className="text-[9px] font-extrabold text-slate-500 uppercase tracking-widest pb-1 flex items-center gap-1.5 border-b border-slate-800/60 pb-1.5">
+                    <span>⚡</span> Relaciones y Química Posicional
+                  </h4>
+                  <div className="space-y-2 text-[11px]">
+                    {(() => {
+                      const list = Object.entries(jugadorSeleccionado.quimicaPosicional || {})
+                        .filter(([_, val]) => val > 0)
+                        .map(([id, val]) => {
+                          const partner = jugadores.find(j => j.id === id);
+                          return { id, val, nombre: partner?.nombre || 'Compañero' };
+                        });
+                      
+                      const amigos = (jugadorSeleccionado.idAmigos || [])
+                        .map(friendId => jugadores.find(j => j.id === friendId)?.nombre)
+                        .filter(Boolean);
+
+                      if (list.length === 0 && amigos.length === 0) {
+                        return (
+                          <div className="text-slate-500 text-[10px] italic py-1 text-center">
+                            Sin afinidades ni química posicional registrada en este plantel.
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div className="space-y-2">
+                          {list.length > 0 && (
+                            <div className="space-y-1">
+                              <span className="text-[9px] text-slate-500 uppercase font-bold tracking-wider block">Química en Cancha:</span>
+                              {list.map(q => {
+                                const tieneBonus = q.val >= 5;
+                                return (
+                                  <div key={q.id} className="flex justify-between items-center bg-slate-900/40 p-2 rounded-lg border border-slate-850">
+                                    <span className="text-slate-300 font-semibold">{q.nombre}</span>
+                                    <span className={`text-[9px] font-extrabold px-2 py-0.5 rounded-full ${tieneBonus ? 'bg-amber-500/20 text-amber-300 border border-amber-500/20 animate-pulse' : 'bg-slate-850 text-slate-400'}`}>
+                                      {tieneBonus ? `🔥 Química Máxima (${q.val} part.)` : `⚡ Progreso: ${q.val}/5`}
+                                    </span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+
+                          {amigos.length > 0 && (
+                            <div className="space-y-1 pt-1.5 border-t border-slate-850">
+                              <span className="text-[9px] text-slate-500 uppercase font-bold tracking-wider block">Amistades y Afinidades:</span>
+                              <div className="flex flex-wrap gap-1">
+                                {amigos.map((nom, idx) => (
+                                  <span key={idx} className="text-[9px] font-bold px-2 py-0.5 rounded bg-teal-500/10 text-teal-350 border border-teal-500/20">
+                                    🤝 {nom}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </div>
+
                 {/* Promesas de Gestión */}
                 {jugadorSeleccionado.promesas && jugadorSeleccionado.promesas.length > 0 && (
                   <div className="p-4 bg-slate-950 border-t border-slate-800 space-y-2 max-h-[160px] overflow-y-auto custom-scrollbar">
