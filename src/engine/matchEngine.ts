@@ -77,16 +77,33 @@ export function obtenerDebilidadEquipo(
 ): 'centrales_lentos' | 'debilidad_aerea' | 'laterales_proyectados' {
   const deEquipo = todosJugadores.filter(j => j.idEquipo === equipoId);
   const dfcs = deEquipo.filter(j => j.posicion === 'DFC');
-  if (dfcs.length > 0) {
-    const avgVel = dfcs.reduce((acc, j) => acc + j.atributos.velocidad, 0) / dfcs.length;
-    const avgFuerza = dfcs.reduce((acc, j) => acc + j.atributos.fuerza, 0) / dfcs.length;
-    if (avgVel < 12) {
-      return 'centrales_lentos';
-    } else if (avgFuerza < 12) {
-      return 'debilidad_aerea';
-    }
+  const laterales = deEquipo.filter(j => j.posicion === 'LD' || j.posicion === 'LI');
+
+  const avgVel = dfcs.length > 0 ? dfcs.reduce((acc, j) => acc + j.atributos.velocidad, 0) / dfcs.length : 12;
+  const avgFuerza = dfcs.length > 0 ? dfcs.reduce((acc, j) => acc + j.atributos.fuerza, 0) / dfcs.length : 12;
+  const avgDefLaterales = laterales.length > 0 ? laterales.reduce((acc, j) => acc + j.atributos.defensa, 0) / laterales.length : 12;
+
+  // Calcular promedios globales de jugadores activos (que pertenezcan a algún club y no estén libres)
+  const todosDfcs = todosJugadores.filter(j => j.posicion === 'DFC' && j.idEquipo && j.idEquipo !== 'libre');
+  const todosLaterales = todosJugadores.filter(j => (j.posicion === 'LD' || j.posicion === 'LI') && j.idEquipo && j.idEquipo !== 'libre');
+
+  const globalAvgVel = todosDfcs.length > 0 ? todosDfcs.reduce((acc, j) => acc + j.atributos.velocidad, 0) / todosDfcs.length : 12;
+  const globalAvgFuerza = todosDfcs.length > 0 ? todosDfcs.reduce((acc, j) => acc + j.atributos.fuerza, 0) / todosDfcs.length : 12;
+  const globalAvgDefLaterales = todosLaterales.length > 0 ? todosLaterales.reduce((acc, j) => acc + j.atributos.defensa, 0) / todosLaterales.length : 12;
+
+  // Calcular las desviaciones relativas frente al promedio global
+  const devVel = avgVel - globalAvgVel;
+  const devFuerza = avgFuerza - globalAvgFuerza;
+  const devDefLaterales = avgDefLaterales - globalAvgDefLaterales;
+
+  // Devolver la debilidad con la mayor desviación negativa (el atributo relativamente más débil frente a la media mundial)
+  if (devVel <= devFuerza && devVel <= devDefLaterales) {
+    return 'centrales_lentos';
+  } else if (devFuerza <= devVel && devFuerza <= devDefLaterales) {
+    return 'debilidad_aerea';
+  } else {
+    return 'laterales_proyectados';
   }
-  return 'laterales_proyectados';
 }
 
 export function aplicarRolYEntrenamiento(

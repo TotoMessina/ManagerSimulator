@@ -149,6 +149,7 @@ export const LiveMatchView: React.FC = () => {
   const [modalSustituciones, setModalSustituciones] = useState<boolean>(false);
   const [seleccionSalida, setSeleccionSalida] = useState<Jugador | null>(null);
   const [seleccionEntrada, setSeleccionEntrada] = useState<Jugador | null>(null);
+  const [lesionadoPendienteId, setLesionadoPendienteId] = useState<string | null>(null);
 
   // Registro de goles y asistencias por jugador durante el vivo
   const goleadoresEnVivo = useRef<Record<string, number>>({});
@@ -1040,8 +1041,25 @@ export const LiveMatchView: React.FC = () => {
             
             lanzarEventoDestacado('lesion', descL);
 
-            // Remover jugador de la cancha de inmediato
-            setJugadoresEnCancha(prev => prev.filter(j => j.id !== jElegido.id));
+            const esUsuario = jElegido.idEquipo === equipoUsuario.id;
+            const suplentesDisponibles = jugadores.filter(j => 
+              j.idEquipo === equipoUsuario.id && 
+              !jugadoresEnCancha.some(c => c.id === j.id) &&
+              !j.lesionado
+            );
+            const tieneCambiosYSuplentes = esUsuario && cambiosRealizados < 5 && suplentesDisponibles.length > 0;
+
+            if (esUsuario && tieneCambiosYSuplentes) {
+              setLesionadoPendienteId(jElegido.id);
+              setSeleccionSalida(jElegido);
+              setEnJuego(false);
+              setModalSustituciones(true);
+            } else {
+              setJugadoresEnCancha(prev => prev.filter(j => j.id !== jElegido.id));
+              if (esUsuario) {
+                setComentarios(prev => [`⚠️ Minuto ${nuevoMin}: ${jElegido.nombre} debe retirarse lesionado, pero no quedan cambios o suplentes disponibles. El equipo jugará con 10.`, ...prev]);
+              }
+            }
           }
         }
 
@@ -1055,7 +1073,26 @@ export const LiveMatchView: React.FC = () => {
             
             const descL = `🚑 Minuto ${nuevoMin}: 🌧️ ¡Resbalón fatal! ${jElegido.nombre} (${jElegido.idEquipo === local.id ? local.nombreCorto : visitante.nombreCorto}) patina sobre el césped mojado por la lluvia torrencial y se lesiona gravemente.`;
             lanzarEventoDestacado('lesion', descL);
-            setJugadoresEnCancha(prev => prev.filter(j => j.id !== jElegido.id));
+            
+            const esUsuario = jElegido.idEquipo === equipoUsuario.id;
+            const suplentesDisponibles = jugadores.filter(j => 
+              j.idEquipo === equipoUsuario.id && 
+              !jugadoresEnCancha.some(c => c.id === j.id) &&
+              !j.lesionado
+            );
+            const tieneCambiosYSuplentes = esUsuario && cambiosRealizados < 5 && suplentesDisponibles.length > 0;
+
+            if (esUsuario && tieneCambiosYSuplentes) {
+              setLesionadoPendienteId(jElegido.id);
+              setSeleccionSalida(jElegido);
+              setEnJuego(false);
+              setModalSustituciones(true);
+            } else {
+              setJugadoresEnCancha(prev => prev.filter(j => j.id !== jElegido.id));
+              if (esUsuario) {
+                setComentarios(prev => [`⚠️ Minuto ${nuevoMin}: ${jElegido.nombre} debe retirarse lesionado, pero no quedan cambios o suplentes disponibles. El equipo jugará con 10.`, ...prev]);
+              }
+            }
           }
         }
 
@@ -1064,7 +1101,7 @@ export const LiveMatchView: React.FC = () => {
     }, velocidad); // 500ms por minuto
 
     return () => clearInterval(tick);
-  }, [enJuego, modalSustituciones, jugadoresEnCancha, ordenActiva, golesLocal, golesVisitante, velocidad, mostrarModalPreMatch, mostrarModalEntretiempo, gritoActivo, gritoMinutoInicio]);
+  }, [enJuego, modalSustituciones, jugadoresEnCancha, ordenActiva, golesLocal, golesVisitante, velocidad, mostrarModalPreMatch, mostrarModalEntretiempo, gritoActivo, gritoMinutoInicio, jugadores, equipoUsuario.id, cambiosRealizados]);
 
   // --- FUNCIÓN DE CONTROL DE EVENTO DESTACADO CON PAUSA ---
   const lanzarEventoDestacado = (tipo: 'gol' | 'lesion' | 'tarjeta', texto: string) => {
@@ -1154,6 +1191,12 @@ export const LiveMatchView: React.FC = () => {
 
     const descSub = `🔄 Minuto ${minuto}: Cambio en ${equipoUsuario.nombreCorto} - Entra ${seleccionEntrada.nombre} (${seleccionEntrada.posicion}) sustituyendo a ${seleccionSalida.nombre} (${seleccionSalida.posicion}).`;
     setComentarios(prev => [descSub, ...prev]);
+
+    // Si había una lesión pendiente y se completó el cambio, limpiarla y reanudar el partido
+    if (lesionadoPendienteId === seleccionSalida.id) {
+      setLesionadoPendienteId(null);
+      setEnJuego(true);
+    }
 
     // Limpiar selección y cerrar modal
     setSeleccionSalida(null);
@@ -1564,77 +1607,108 @@ export const LiveMatchView: React.FC = () => {
                   Realizar Cambios y Sustituciones ({cambiosRealizados} / 5)
                 </h3>
               </div>
-              <button
-                onClick={() => setModalSustituciones(false)}
-                className="text-slate-500 hover:text-white text-xl font-bold"
-              >
-                ✕
-              </button>
+              {!lesionadoPendienteId && (
+                <button
+                  onClick={() => setModalSustituciones(false)}
+                  className="text-slate-500 hover:text-white text-xl font-bold"
+                >
+                  ✕
+                </button>
+              )}
             </div>
 
             {/* Cuerpo del Modal */}
-            <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6 overflow-y-auto max-h-[400px]">
-              
-              {/* Columna Izquierda: Los 11 en cancha del Usuario */}
-              <div className="space-y-3">
-                <h4 className="text-xs font-black text-slate-400 uppercase tracking-wider border-b border-slate-800 pb-2">
-                  👤 En Campo de Juego
-                </h4>
-                
-                <div className="grid grid-cols-1 gap-2">
-                  {onceUsuario.map(j => (
-                    <div
-                      key={j.id}
-                      onClick={() => setSeleccionSalida(seleccionSalida?.id === j.id ? null : j)}
-                      className={`p-3 rounded-lg border cursor-pointer transition-all flex justify-between items-center ${
-                        seleccionSalida?.id === j.id
-                          ? 'bg-rose-500/10 border-rose-500 text-rose-300'
-                          : 'bg-slate-950/40 border-slate-850 hover:bg-slate-950 hover:border-slate-700 text-slate-200'
-                      }`}
-                    >
-                      <div>
-                        <div className="font-bold text-xs">{j.nombre}</div>
-                        <div className="text-[9px] text-slate-500 font-mono mt-0.5">{j.posicion} • CA: {j.ca} • Fis: {j.formaFisica}%</div>
-                      </div>
-                      <div className="text-xs text-rose-500 font-bold uppercase tracking-wide">
-                        {seleccionSalida?.id === j.id ? 'Seleccionado' : 'Sustituir'}
-                      </div>
-                    </div>
-                  ))}
+            <div className="p-6 overflow-y-auto max-h-[460px] space-y-4">
+              {lesionadoPendienteId && (
+                <div className="p-3.5 bg-rose-500/10 border border-rose-500/25 text-rose-450 text-xs rounded-xl flex items-start gap-2.5 animate-pulse">
+                  <span className="text-base">🚑</span>
+                  <span>
+                    <strong>Sustitución Obligatoria por Lesión:</strong> Se ha lesionado un jugador de tu plantilla en cancha. Para poder reanudar el partido, debes sustituirlo seleccionando un suplente de tu banco de suplentes.
+                  </span>
                 </div>
-              </div>
+              )}
 
-              {/* Columna Derecha: El Banco de Suplentes del Usuario */}
-              <div className="space-y-3">
-                <h4 className="text-xs font-black text-slate-400 uppercase tracking-wider border-b border-slate-800 pb-2">
-                  🪑 En el Banco de Suplentes
-                </h4>
-                
-                {bancaUsuario.length === 0 ? (
-                  <p className="text-xs text-slate-500">No hay suplentes viables disponibles en este momento.</p>
-                ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Columna Izquierda: Los 11 en cancha del Usuario */}
+                <div className="space-y-3">
+                  <h4 className="text-xs font-black text-slate-400 uppercase tracking-wider border-b border-slate-800 pb-2">
+                    👤 En Campo de Juego
+                  </h4>
+                  
                   <div className="grid grid-cols-1 gap-2">
-                    {bancaUsuario.map(j => (
-                      <div
-                        key={j.id}
-                        onClick={() => setSeleccionEntrada(seleccionEntrada?.id === j.id ? null : j)}
-                        className={`p-3 rounded-lg border cursor-pointer transition-all flex justify-between items-center ${
-                          seleccionEntrada?.id === j.id
-                            ? 'bg-teal-500/10 border-teal-500 text-teal-300'
-                            : 'bg-slate-950/40 border-slate-850 hover:bg-slate-950 hover:border-slate-700 text-slate-200'
-                        }`}
-                      >
-                        <div>
-                          <div className="font-bold text-xs">{j.nombre}</div>
-                          <div className="text-[9px] text-slate-500 font-mono mt-0.5">{j.posicion} • CA: {j.ca} • Fis: {j.formaFisica}%</div>
+                    {onceUsuario.map(j => {
+                      const esElLesionado = lesionadoPendienteId === j.id;
+                      const esLesionadoGeneral = lesionadosEnVivo.current[j.id] !== undefined;
+
+                      return (
+                        <div
+                          key={j.id}
+                          onClick={() => {
+                            if (lesionadoPendienteId) return; // Deshabilitar cambio de selección de salida si hay lesión obligatoria
+                            setSeleccionSalida(seleccionSalida?.id === j.id ? null : j);
+                          }}
+                          className={`p-3 rounded-lg border transition-all flex justify-between items-center ${
+                            esElLesionado
+                              ? 'bg-rose-955/40 border-rose-500 text-rose-350 cursor-default ring-2 ring-rose-500/50'
+                              : seleccionSalida?.id === j.id
+                                ? 'bg-rose-500/10 border-rose-500 text-rose-300 cursor-pointer'
+                                : lesionadoPendienteId
+                                  ? 'bg-slate-950/20 border-slate-900 text-slate-500 cursor-not-allowed opacity-40'
+                                  : 'bg-slate-950/40 border-slate-850 hover:bg-slate-955 hover:border-slate-700 text-slate-200 cursor-pointer'
+                          }`}
+                        >
+                          <div>
+                            <div className="font-bold text-xs flex items-center gap-1.5">
+                              {j.nombre}
+                              {esLesionadoGeneral && (
+                                <span className="text-[7px] font-black bg-rose-500/15 border border-rose-500/30 text-rose-300 px-1 py-0.5 rounded uppercase tracking-wider">
+                                  🚑 Lesionado ({lesionadosEnVivo.current[j.id]} sem)
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[9px] text-slate-500 font-mono mt-0.5">{j.posicion} • CA: {j.ca} • Fis: {j.formaFisica}%</div>
+                          </div>
+                          <div className={`text-xs font-bold uppercase tracking-wide ${esElLesionado ? 'text-rose-400' : 'text-rose-500'}`}>
+                            {esElLesionado ? 'Lesionado' : seleccionSalida?.id === j.id ? 'Seleccionado' : 'Sustituir'}
+                          </div>
                         </div>
-                        <div className="text-xs text-teal-500 font-bold uppercase tracking-wide">
-                          {seleccionEntrada?.id === j.id ? 'Seleccionado' : 'Ingresar'}
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
-                )}
+                </div>
+
+                {/* Columna Derecha: El Banco de Suplentes del Usuario */}
+                <div className="space-y-3">
+                  <h4 className="text-xs font-black text-slate-400 uppercase tracking-wider border-b border-slate-800 pb-2">
+                    🪑 En el Banco de Suplentes
+                  </h4>
+                  
+                  {bancaUsuario.length === 0 ? (
+                    <p className="text-xs text-slate-500">No hay suplentes viables disponibles en este momento.</p>
+                  ) : (
+                    <div className="grid grid-cols-1 gap-2">
+                      {bancaUsuario.map(j => (
+                        <div
+                          key={j.id}
+                          onClick={() => setSeleccionEntrada(seleccionEntrada?.id === j.id ? null : j)}
+                          className={`p-3 rounded-lg border cursor-pointer transition-all flex justify-between items-center ${
+                            seleccionEntrada?.id === j.id
+                              ? 'bg-teal-500/10 border-teal-500 text-teal-300'
+                              : 'bg-slate-950/40 border-slate-850 hover:bg-slate-950 hover:border-slate-700 text-slate-200'
+                          }`}
+                        >
+                          <div>
+                            <div className="font-bold text-xs">{j.nombre}</div>
+                            <div className="text-[9px] text-slate-500 font-mono mt-0.5">{j.posicion} • CA: {j.ca} • Fis: {j.formaFisica}%</div>
+                          </div>
+                          <div className="text-xs text-teal-500 font-bold uppercase tracking-wide">
+                            {seleccionEntrada?.id === j.id ? 'Seleccionado' : 'Ingresar'}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -1649,16 +1723,18 @@ export const LiveMatchView: React.FC = () => {
               </div>
 
               <div className="flex gap-3">
-                <button
-                  onClick={() => {
-                    setSeleccionSalida(null);
-                    setSeleccionEntrada(null);
-                    setModalSustituciones(false);
-                  }}
-                  className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-400 hover:text-white rounded-lg text-xs uppercase font-bold tracking-wider transition-all"
-                >
-                  Cancelar
-                </button>
+                {!lesionadoPendienteId && (
+                  <button
+                    onClick={() => {
+                      setSeleccionSalida(null);
+                      setSeleccionEntrada(null);
+                      setModalSustituciones(false);
+                    }}
+                    className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-400 hover:text-white rounded-lg text-xs uppercase font-bold tracking-wider transition-all"
+                  >
+                    Cancelar
+                  </button>
+                )}
                 <button
                   onClick={procesarSustitucion}
                   disabled={!seleccionSalida || !seleccionEntrada}

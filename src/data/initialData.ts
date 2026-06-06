@@ -9284,6 +9284,40 @@ export function generarNewgen(
   const personalidades: PersonalidadJugador[] = ['Líder', 'Ambicioso', 'Profesional', 'Problemático', 'Leal'];
   const personalidad = personalidades[Math.floor(Math.random() * personalidades.length)];
 
+  let crianzaEstilistica = 'Crianza: Estándar';
+  let bonusRegate = 0;
+  let bonusAceleracion = 0;
+  let bonusVision = 0;
+  let penaltyPhysical = 0;
+
+  let bonusFuerza = 0;
+  let bonusResistencia = 0;
+  let bonusDefensa = 0;
+  let bonusDeterminacion = 0;
+
+  let bonusPase = 0;
+  let bonusDecisiones = 0;
+  let bonusPosicionamiento = 0;
+
+  if (nacionalidad === 'Argentina' || nacionalidad === 'Brasil') {
+    crianzaEstilistica = 'Crianza: Potrero Sudamericano';
+    bonusRegate = 3;
+    bonusAceleracion = 3;
+    bonusVision = 3;
+    penaltyPhysical = -2;
+  } else if (nacionalidad === 'Alemania' || nacionalidad === 'Inglaterra') {
+    crianzaEstilistica = 'Crianza: Escuela del Norte';
+    bonusFuerza = 3;
+    bonusResistencia = 3;
+    bonusDefensa = 3;
+    bonusDeterminacion = 3;
+  } else if (nacionalidad === 'España' || nacionalidad === 'Italia') {
+    crianzaEstilistica = 'Crianza: Academia Continental';
+    bonusPase = 3;
+    bonusDecisiones = 3;
+    bonusPosicionamiento = 3;
+  }
+
   return {
     id: `newgen-${Date.now()}-${randomRange(1000, 9999)}-${Math.random().toString(36).substring(2, 6)}`,
     nombre: generarNombreAleatorio(nacionalidad),
@@ -9296,20 +9330,21 @@ export function generarNewgen(
     ca,
     pa,
     manejoPresion: edad < 20 ? randomRange(8, 12) : randomRange(1, 20),
+    crianzaEstilistica,
     atributos: {
       remate: esArquero ? 1 : clamp(Math.round(ca * 0.15 + randomRange(-2, 2)), 5, 20),
-      pase: clamp(Math.round(ca * 0.16 + randomRange(-2, 2)), 5, 20),
-      regate: esArquero ? 5 : clamp(Math.round(ca * 0.15 + randomRange(-2, 2)), 5, 20),
-      defensa: esArquero ? 3 : clamp(Math.round(ca * 0.14 + randomRange(-2, 3)), 5, 20),
+      pase: clamp(Math.round(ca * 0.16 + randomRange(-2, 2) + bonusPase), 5, 20),
+      regate: esArquero ? 5 : clamp(Math.round(ca * 0.15 + randomRange(-2, 2) + bonusRegate), 5, 20),
+      defensa: esArquero ? 3 : clamp(Math.round(ca * 0.14 + randomRange(-2, 3) + bonusDefensa), 5, 20),
       tecnica: esArquero ? 9 : clamp(Math.round(ca * 0.15 + randomRange(-2, 2)), 5, 20),
-      velocidad: clamp(Math.round(ca * 0.14 + randomRange(-2, 2)), 5, 20),
-      aceleracion: clamp(Math.round(ca * 0.14 + randomRange(-2, 2)), 5, 20),
-      resistencia: clamp(Math.round(ca * 0.15 + randomRange(-2, 2)), 5, 20),
-      fuerza: clamp(Math.round(ca * 0.14 + randomRange(-2, 2)), 5, 20),
-      vision: clamp(Math.round(ca * 0.14 + randomRange(-2, 2)), 5, 20),
-      decisiones: clamp(Math.round(ca * 0.15 + randomRange(-2, 2)), 5, 20),
-      determinacion: clamp(Math.round(ca * 0.15 + randomRange(-2, 2)), 5, 20),
-      posicionamiento: clamp(Math.round(ca * 0.15 + randomRange(-2, 2)), 5, 20),
+      velocidad: clamp(Math.round(ca * 0.14 + randomRange(-2, 2) + penaltyPhysical), 5, 20),
+      aceleracion: clamp(Math.round(ca * 0.14 + randomRange(-2, 2) + bonusAceleracion), 5, 20),
+      resistencia: clamp(Math.round(ca * 0.15 + randomRange(-2, 2) + bonusResistencia + penaltyPhysical), 5, 20),
+      fuerza: clamp(Math.round(ca * 0.14 + randomRange(-2, 2) + bonusFuerza + penaltyPhysical), 5, 20),
+      vision: clamp(Math.round(ca * 0.14 + randomRange(-2, 2) + bonusVision), 5, 20),
+      decisiones: clamp(Math.round(ca * 0.15 + randomRange(-2, 2) + bonusDecisiones), 5, 20),
+      determinacion: clamp(Math.round(ca * 0.15 + randomRange(-2, 2) + bonusDeterminacion), 5, 20),
+      posicionamiento: clamp(Math.round(ca * 0.15 + randomRange(-2, 2) + bonusPosicionamiento), 5, 20),
       reflejos: esArquero ? clamp(Math.round(ca * 0.17 + randomRange(-2, 2)), 8, 20) : 1
     },
     formaFisica: 100,
@@ -9341,6 +9376,40 @@ function generarJugador(
   const personalidades: PersonalidadJugador[] = ['Líder', 'Ambicioso', 'Profesional', 'Problemático', 'Leal'];
   const personalidad = personalidades[Math.floor(Math.random() * personalidades.length)];
 
+  let crianzaEstilistica = 'Crianza: Estándar';
+  let bonusRegate = 0;
+  let bonusAceleracion = 0;
+  let bonusVision = 0;
+  let penaltyPhysical = 0;
+
+  let bonusFuerza = 0;
+  let bonusResistencia = 0;
+  let bonusDefensa = 0;
+  let bonusDeterminacion = 0;
+
+  let bonusPase = 0;
+  let bonusDecisiones = 0;
+  let bonusPosicionamiento = 0;
+
+  if (nacionalidad === 'Argentina' || nacionalidad === 'Brasil') {
+    crianzaEstilistica = 'Crianza: Potrero Sudamericano';
+    bonusRegate = 3;
+    bonusAceleracion = 3;
+    bonusVision = 3;
+    penaltyPhysical = -2;
+  } else if (nacionalidad === 'Alemania' || nacionalidad === 'Inglaterra') {
+    crianzaEstilistica = 'Crianza: Escuela del Norte';
+    bonusFuerza = 3;
+    bonusResistencia = 3;
+    bonusDefensa = 3;
+    bonusDeterminacion = 3;
+  } else if (nacionalidad === 'España' || nacionalidad === 'Italia') {
+    crianzaEstilistica = 'Crianza: Academia Continental';
+    bonusPase = 3;
+    bonusDecisiones = 3;
+    bonusPosicionamiento = 3;
+  }
+
   return {
     id: generarIdUnico(idEquipo),
     nombre: generarNombreAleatorio(nacionalidad),
@@ -9353,20 +9422,21 @@ function generarJugador(
     ca,
     pa,
     manejoPresion: edad < 20 ? randomRange(8, 12) : randomRange(1, 20),
+    crianzaEstilistica,
     atributos: {
       remate: esArquero ? 1 : clamp(Math.round(ca * 0.15 + randomRange(-2, 2)), 5, 20),
-      pase: clamp(Math.round(ca * 0.16 + randomRange(-2, 2)), 5, 20),
-      regate: esArquero ? 5 : clamp(Math.round(ca * 0.15 + randomRange(-2, 2)), 5, 20),
-      defensa: esArquero ? 3 : clamp(Math.round(ca * 0.14 + randomRange(-2, 3)), 5, 20),
+      pase: clamp(Math.round(ca * 0.16 + randomRange(-2, 2) + bonusPase), 5, 20),
+      regate: esArquero ? 5 : clamp(Math.round(ca * 0.15 + randomRange(-2, 2) + bonusRegate), 5, 20),
+      defensa: esArquero ? 3 : clamp(Math.round(ca * 0.14 + randomRange(-2, 3) + bonusDefensa), 5, 20),
       tecnica: esArquero ? 9 : clamp(Math.round(ca * 0.15 + randomRange(-2, 2)), 5, 20),
-      velocidad: clamp(Math.round(ca * 0.14 + randomRange(-2, 2)), 5, 20),
-      aceleracion: clamp(Math.round(ca * 0.14 + randomRange(-2, 2)), 5, 20),
-      resistencia: clamp(Math.round(ca * 0.15 + randomRange(-2, 2)), 5, 20),
-      fuerza: clamp(Math.round(ca * 0.14 + randomRange(-2, 2)), 5, 20),
-      vision: clamp(Math.round(ca * 0.14 + randomRange(-2, 2)), 5, 20),
-      decisiones: clamp(Math.round(ca * 0.15 + randomRange(-2, 2)), 5, 20),
-      determinacion: clamp(Math.round(ca * 0.15 + randomRange(-2, 2)), 5, 20),
-      posicionamiento: clamp(Math.round(ca * 0.15 + randomRange(-2, 2)), 5, 20),
+      velocidad: clamp(Math.round(ca * 0.14 + randomRange(-2, 2) + penaltyPhysical), 5, 20),
+      aceleracion: clamp(Math.round(ca * 0.14 + randomRange(-2, 2) + bonusAceleracion), 5, 20),
+      resistencia: clamp(Math.round(ca * 0.15 + randomRange(-2, 2) + bonusResistencia + penaltyPhysical), 5, 20),
+      fuerza: clamp(Math.round(ca * 0.14 + randomRange(-2, 2) + bonusFuerza + penaltyPhysical), 5, 20),
+      vision: clamp(Math.round(ca * 0.14 + randomRange(-2, 2) + bonusVision), 5, 20),
+      decisiones: clamp(Math.round(ca * 0.15 + randomRange(-2, 2) + bonusDecisiones), 5, 20),
+      determinacion: clamp(Math.round(ca * 0.15 + randomRange(-2, 2) + bonusDeterminacion), 5, 20),
+      posicionamiento: clamp(Math.round(ca * 0.15 + randomRange(-2, 2) + bonusPosicionamiento), 5, 20),
       reflejos: esArquero ? clamp(Math.round(ca * 0.17 + randomRange(-2, 2)), 8, 20) : 1
     },
     formaFisica: randomRange(88, 100),
@@ -9435,8 +9505,19 @@ function generarTodosLosJugadores(): Jugador[] {
     if (!agrupados[j.idEquipo]) {
       agrupados[j.idEquipo] = [];
     }
+
+    let crianza = undefined;
+    if (j.nacionalidad === 'Argentina' || j.nacionalidad === 'Brasil') {
+      crianza = 'Crianza: Potrero Sudamericano';
+    } else if (j.nacionalidad === 'Alemania' || j.nacionalidad === 'Inglaterra') {
+      crianza = 'Crianza: Escuela del Norte';
+    } else if (j.nacionalidad === 'España' || j.nacionalidad === 'Italia') {
+      crianza = 'Crianza: Academia Continental';
+    }
+
     const crackConPers: Jugador = {
       ...j,
+      crianzaEstilistica: crianza,
       personalidad: j.personalidad || personalidades[Math.floor(Math.random() * personalidades.length)],
       partidosSeguidosBanco: j.partidosSeguidosBanco !== undefined ? j.partidosSeguidosBanco : 0
     };

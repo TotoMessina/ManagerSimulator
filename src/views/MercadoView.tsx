@@ -11,6 +11,16 @@ const formatearMoneda = (valor: number): string => {
   return `${(valor / 1000).toFixed(0)} m€`;
 };
 
+const obtenerValorConDescuentoContrato = (jugador: Jugador): number => {
+  if (jugador.mesesContrato === undefined) return jugador.valorMercado;
+  let factor = 1.0;
+  if (jugador.mesesContrato <= 6) factor = 0.50;
+  else if (jugador.mesesContrato <= 12) factor = 0.70;
+  else if (jugador.mesesContrato <= 18) factor = 0.85;
+  else if (jugador.mesesContrato <= 24) factor = 0.95;
+  return Math.round(jugador.valorMercado * factor);
+};
+
 export const MercadoView: React.FC = () => {
   const { jugadores, equipos, equipoUsuario, comprarJugador, ofrecerContratoLibre } = useGame();
 
@@ -70,10 +80,10 @@ export const MercadoView: React.FC = () => {
   const abrirModalOferta = (jugador: Jugador) => {
     setJugadorAOfrecer(jugador);
     const esLibre = jugador.idEquipo === 'libre' || !jugador.idEquipo;
-    if (equipoUsuario.ffpPenalizado && esLibre) {
+    if (esLibre) {
       setOfertaValor(0);
     } else {
-      setOfertaValor(jugador.valorMercado); // Inicializar oferta en su valor de mercado actual
+      setOfertaValor(obtenerValorConDescuentoContrato(jugador)); // Inicializar oferta en su valor descontado
     }
     setClausulaOfrecidaCompra(Math.round((jugador.valorMercado * 1.8) / 1000) * 1000);
     setFeedbackNegociacion(null);
@@ -163,7 +173,7 @@ export const MercadoView: React.FC = () => {
           <div>
             <h4 className="text-sm font-extrabold text-red-400">Sanción del Fair Play Financiero Activa</h4>
             <p className="text-xs text-slate-300 mt-1 leading-relaxed">
-              Tu club ha infringido las reglas del FFP al gastar más del 80% de sus ingresos anuales en sueldos y fichajes por dos temporadas consecutivas.
+              Tu club ha infringido las reglas del FFP al gastar más del 100% de sus ingresos anuales en sueldos y fichajes por dos temporadas consecutivas.
               Se te han descontado **9 puntos** en la tabla y las transferencias de pago están **bloqueadas**.
               Solo puedes incorporar **agentes libres a coste cero** (oferta de fichaje de 0€).
             </p>
@@ -307,7 +317,18 @@ export const MercadoView: React.FC = () => {
 
                       {/* Valor de Mercado */}
                       <td className="px-3 py-4 text-right font-extrabold text-slate-200">
-                        {formatearMoneda(jugador.valorMercado)}
+                        {(() => {
+                          const valDescuento = obtenerValorConDescuentoContrato(jugador);
+                          if (valDescuento !== jugador.valorMercado) {
+                            return (
+                              <div className="flex flex-col items-end">
+                                <span className="text-[10px] text-slate-500 line-through font-mono">{formatearMoneda(jugador.valorMercado)}</span>
+                                <span className="text-teal-400 font-black font-mono">{formatearMoneda(valDescuento)}</span>
+                              </div>
+                            );
+                          }
+                          return <span className="font-mono">{formatearMoneda(jugador.valorMercado)}</span>;
+                        })()}
                       </td>
 
                       {/* Cláusula */}
@@ -439,7 +460,10 @@ export const MercadoView: React.FC = () => {
                 </div>
               ) : (
                 /* Formulario de envío */
-                <form onSubmit={enviarOferta} className="space-y-4">
+                (() => {
+                  const esLibre = jugadorAOfrecer.idEquipo === 'libre' || !jugadorAOfrecer.idEquipo;
+                  return (
+                    <form onSubmit={enviarOferta} className="space-y-4">
                   {promesaExigida && (
                     <div className="p-3.5 bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs rounded-xl space-y-1">
                       <div className="font-bold flex items-center gap-1.5 uppercase tracking-wide text-[10px]">
@@ -487,19 +511,23 @@ export const MercadoView: React.FC = () => {
                     <div className="relative">
                       <input
                         type="number"
-                        min={equipoUsuario.ffpPenalizado && (jugadorAOfrecer.idEquipo === 'libre' || !jugadorAOfrecer.idEquipo) ? "0" : "1"}
-                        max={equipoUsuario.ffpPenalizado && (jugadorAOfrecer.idEquipo === 'libre' || !jugadorAOfrecer.idEquipo) ? "0" : equipoUsuario.presupuestoFichajes}
+                        min={esLibre ? "0" : "1"}
+                        max={esLibre ? "0" : equipoUsuario.presupuestoFichajes}
                         value={ofertaValor}
                         onChange={(e) => setOfertaValor(Number(e.target.value))}
-                        disabled={equipoUsuario.presupuestoFichajes <= 0 || (equipoUsuario.ffpPenalizado && (jugadorAOfrecer.idEquipo === 'libre' || !jugadorAOfrecer.idEquipo))}
+                        disabled={esLibre || equipoUsuario.presupuestoFichajes <= 0}
                         className="w-full bg-slate-950 border border-slate-850 rounded-xl py-2.5 px-4 text-sm font-semibold text-slate-100 focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500 transition-all font-mono"
                         required
                       />
                       <span className="absolute right-4 inset-y-0 flex items-center text-xs font-extrabold text-slate-500">€</span>
                     </div>
-                    {equipoUsuario.ffpPenalizado && (jugadorAOfrecer.idEquipo === 'libre' || !jugadorAOfrecer.idEquipo) ? (
+                    {esLibre ? (
+                      <span className="text-[10px] text-teal-400 block leading-normal font-semibold">
+                        Este jugador es Agente Libre. Su incorporación al equipo tiene un costo de traspaso de 0€.
+                      </span>
+                    ) : equipoUsuario.ffpPenalizado ? (
                       <span className="text-[10px] text-rose-450 block leading-normal font-semibold">
-                        Debido a la sanción de Fair Play Financiero, solo puedes incorporar a este agente libre por una prima de 0€.
+                        Debido a la Sanción de Fair Play Financiero, solo puedes incorporar a este agente libre por una prima de 0€.
                       </span>
                     ) : (
                       <span className="text-[10px] text-slate-500 block leading-normal">
@@ -519,7 +547,7 @@ export const MercadoView: React.FC = () => {
                         value={clausulaOfrecidaCompra || ''}
                         onChange={(e) => setClausulaOfrecidaCompra(Number(e.target.value) || 0)}
                         placeholder="Sin cláusula"
-                        disabled={equipoUsuario.ffpPenalizado && (jugadorAOfrecer.idEquipo === 'libre' || !jugadorAOfrecer.idEquipo)}
+                        disabled={esLibre || (equipoUsuario.ffpPenalizado && (jugadorAOfrecer.idEquipo === 'libre' || !jugadorAOfrecer.idEquipo))}
                         className="w-full bg-slate-950 border border-slate-850 rounded-xl py-2.5 px-4 text-sm font-semibold text-slate-100 focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500 transition-all font-mono"
                       />
                       <span className="absolute right-4 inset-y-0 flex items-center text-xs font-extrabold text-slate-500">€</span>
@@ -540,8 +568,9 @@ export const MercadoView: React.FC = () => {
                     <button
                       type="submit"
                       disabled={
-                        (equipoUsuario.ffpPenalizado && (jugadorAOfrecer.idEquipo === 'libre' || !jugadorAOfrecer.idEquipo) && ofertaValor !== 0) ||
-                        (!equipoUsuario.ffpPenalizado && (ofertaValor <= 0 || ofertaValor > equipoUsuario.presupuestoFichajes))
+                        esLibre
+                          ? ofertaValor !== 0
+                          : (ofertaValor <= 0 || ofertaValor > equipoUsuario.presupuestoFichajes)
                       }
                       className="px-5 py-2 bg-teal-600 hover:bg-teal-500 text-white font-bold rounded-lg text-xs uppercase tracking-wider shadow-md transition-all active:scale-95 disabled:opacity-50 disabled:pointer-events-none"
                     >
@@ -549,6 +578,8 @@ export const MercadoView: React.FC = () => {
                     </button>
                   </div>
                 </form>
+              );
+            })()
               )}
 
             </div>

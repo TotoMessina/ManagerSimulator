@@ -124,6 +124,7 @@ export interface Jugador {
   idRivales?: string[];
   quimicaPosicional?: Record<string, number>;
   manejoPresion?: number;
+  crianzaEstilistica?: string;
 }
 
 export type EstiloJuego = 'Ofensivo' | 'Defensivo' | 'Equilibrado';
@@ -180,6 +181,7 @@ export interface Equipo {
   ffpPenalizado?: boolean;
   ffpSancionPuntosPendiente?: boolean;
   enCrisisAcreedores?: boolean;
+  sponsorMultiplicador?: number;
 }
 
 export interface TablaEquipo {

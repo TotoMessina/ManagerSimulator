@@ -43,6 +43,10 @@ export interface GameContextProps {
   reputacionManager: number;
   historialTitulos: string[];
   juegoIniciado: boolean;
+  coeficientesLigas: Record<string, number>;
+  historialCampeonesCopa: string[];
+  ligaDecadente: string | null;
+  ligasSuperPredispuestas: string[];
   aceptarOfertaEmpleo: (equipoId: string) => void;
   reunionPrivadaActiva: ReunionPrivada | null;
   resolverReunionPrivada: (decision: 'promesa' | 'autoritario' | 'salida') => void;
@@ -400,6 +404,13 @@ const procesarPasoDelDiaTutorias = (
   };
 };
 
+const obtenerPaisEquipoLocal = (equipoId: string): 'espana' | 'inglaterra' | 'italia' | 'alemania' => {
+  if (equiposLaLiga.some(e => e.id === equipoId)) return 'espana';
+  if (equiposPremier.some(e => e.id === equipoId)) return 'inglaterra';
+  if (equiposSerieA.some(e => e.id === equipoId)) return 'italia';
+  return 'alemania';
+};
+
 const inicializarCopa = (
   equiposList: Equipo[],
   fechaInicio: string,
@@ -407,12 +418,6 @@ const inicializarCopa = (
   clasificadosLiga?: Equipo[],
   paisLigaActiva?: string
 ): CopaCampeones => {
-  const obtenerPaisEquipoLocal = (equipoId: string): 'espana' | 'inglaterra' | 'italia' | 'alemania' => {
-    if (equiposLaLiga.some(e => e.id === equipoId)) return 'espana';
-    if (equiposPremier.some(e => e.id === equipoId)) return 'inglaterra';
-    if (equiposSerieA.some(e => e.id === equipoId)) return 'italia';
-    return 'alemania';
-  };
 
   const getTeamsForCountry = (country: 'espana' | 'inglaterra' | 'italia' | 'alemania'): Equipo[] => {
     const isUserLeague = paisLigaActiva && paisLigaActiva.toLowerCase() === (
@@ -632,9 +637,17 @@ const ejecutarPasoDelTiempo = (
 
     // 2. Progresión mensual al final del mes
     if (cambioDeMes) {
-      // --- MENORES DE 23 AÑOS (PROGRESIÓN) ---
-      if (jugadorClon.edad < 23 && jugadorClon.ca < jugadorClon.pa) {
-        if (Math.random() < 0.40) {
+      let probCrecimientoMensual = 0;
+      if (jugadorClon.edad < 23) {
+        probCrecimientoMensual = 0.40;
+      } else if (jugadorClon.edad >= 23 && jugadorClon.edad <= 27) {
+        probCrecimientoMensual = 0.15;
+      } else if (jugadorClon.edad >= 28 && jugadorClon.edad <= 32) {
+        probCrecimientoMensual = 0.05;
+      }
+
+      if (probCrecimientoMensual > 0 && jugadorClon.ca < jugadorClon.pa) {
+        if (Math.random() < probCrecimientoMensual) {
           const atributosDisponibles = Object.keys(jugadorClon.atributos) as (keyof typeof jugadorClon.atributos)[];
 
           // Elegir 2 atributos distintos al azar
@@ -666,28 +679,79 @@ const ejecutarPasoDelTiempo = (
         }
       }
 
-      // --- MAYORES DE 33 AÑOS (REGRESIÓN FÍSICA) ---
-      if (jugadorClon.edad > 33) {
-        if (Math.random() < 0.30) {
-          // Declive de atributos físicos
-          const atributosFisicos: (keyof typeof jugadorClon.atributos)[] = ['velocidad', 'resistencia', 'aceleracion', 'fuerza'];
-          const attrElegido = atributosFisicos[Math.floor(Math.random() * atributosFisicos.length)];
+      // --- BREAKTHROUGH / SUPERACIÓN DE LÍMITE (EDAD < 25) ---
+      if (jugadorClon.edad < 25 && jugadorClon.ca >= jugadorClon.pa - 1) {
+        const juegaRegularmente = jugadorClon.titular === true || jugadorClon.partidosJugados >= 10;
+        const cumpleEntrenamiento = jugadorClon.idEquipo !== equipoUsuarioId || (jugadorClon.entrenamientoIndividual !== undefined && jugadorClon.entrenamientoIndividual !== null);
 
-          let decrementado = false;
-          if (jugadorClon.atributos[attrElegido] > 1) {
-            jugadorClon.atributos[attrElegido] = jugadorClon.atributos[attrElegido] - 1;
-            decrementado = true;
+        if (juegaRegularmente && cumpleEntrenamiento) {
+          if (Math.random() < 0.25) {
+            jugadorClon.pa = Math.min(99, jugadorClon.pa + 1);
+            jugadorClon.ca = Math.min(jugadorClon.pa, jugadorClon.ca + 1);
+
+            const atributosDisponibles = Object.keys(jugadorClon.atributos) as (keyof typeof jugadorClon.atributos)[];
+            const attr = atributosDisponibles[Math.floor(Math.random() * atributosDisponibles.length)];
+            if (jugadorClon.atributos[attr] < 20) {
+              jugadorClon.atributos[attr] = jugadorClon.atributos[attr] + 1;
+            }
+
+            if (jugadorClon.idEquipo === equipoUsuarioId) {
+              nuevasNoticias.push(
+                `🌟 [Explosión de Potencial] ¡Increíble desarrollo de ${jugadorClon.nombre}! A sus ${jugadorClon.edad} años, superó su límite teórico, aumentando su potencial a ${jugadorClon.pa} y mejorando en ${nombresAmigables[attr] || attr}.`
+              );
+            }
           }
+        }
+      }
 
-          // Disminuir CA en -1 en consecuencia
-          jugadorClon.ca = Math.max(1, jugadorClon.ca - 1);
+      // --- DECLIVE Y REGRESIÓN POR EDAD ---
+      let decliveFisicoProb = 0;
+      let decliveTecnicoMentalProb = 0;
 
-          // Si es del equipo del usuario, reportar noticia
-          if (jugadorClon.idEquipo === equipoUsuarioId && decrementado) {
-            nuevasNoticias.push(
-              `📉 [Declive Físico] Informe médico: ${jugadorClon.nombre} (${jugadorClon.edad} años) muestra signos de desgaste por edad, reduciendo su nivel de ${nombresAmigables[attrElegido] || String(attrElegido)}.`
-            );
-          }
+      if (jugadorClon.edad >= 30 && jugadorClon.edad <= 33) {
+        decliveFisicoProb = 0.05;
+      } else if (jugadorClon.edad > 33) {
+        decliveFisicoProb = 0.30;
+        decliveTecnicoMentalProb = 0.10;
+      }
+
+      if (decliveFisicoProb > 0 && Math.random() < decliveFisicoProb) {
+        const atributosFisicos: (keyof typeof jugadorClon.atributos)[] = ['velocidad', 'resistencia', 'aceleracion', 'fuerza'];
+        const attrElegido = atributosFisicos[Math.floor(Math.random() * atributosFisicos.length)];
+
+        let decrementado = false;
+        if (jugadorClon.atributos[attrElegido] > 1) {
+          jugadorClon.atributos[attrElegido] = jugadorClon.atributos[attrElegido] - 1;
+          decrementado = true;
+        }
+
+        jugadorClon.ca = Math.max(1, jugadorClon.ca - 1);
+
+        if (jugadorClon.idEquipo === equipoUsuarioId && decrementado) {
+          nuevasNoticias.push(
+            `📉 [Declive Físico] Informe médico: ${jugadorClon.nombre} (${jugadorClon.edad} años) muestra signos de desgaste por edad, reduciendo su nivel de ${nombresAmigables[attrElegido] || String(attrElegido)}.`
+          );
+        }
+      }
+
+      if (decliveTecnicoMentalProb > 0 && Math.random() < decliveTecnicoMentalProb) {
+        const atributosTecnicoMentales: (keyof typeof jugadorClon.atributos)[] = [
+          'remate', 'pase', 'regate', 'defensa', 'tecnica', 'vision', 'decisiones', 'determinacion', 'posicionamiento'
+        ];
+        const attrElegido = atributosTecnicoMentales[Math.floor(Math.random() * atributosTecnicoMentales.length)];
+
+        let decrementado = false;
+        if (jugadorClon.atributos[attrElegido] > 1) {
+          jugadorClon.atributos[attrElegido] = jugadorClon.atributos[attrElegido] - 1;
+          decrementado = true;
+        }
+
+        jugadorClon.ca = Math.max(1, jugadorClon.ca - 1);
+
+        if (jugadorClon.idEquipo === equipoUsuarioId && decrementado) {
+          nuevasNoticias.push(
+            `📉 [Declive Técnico-Mental] Informe del cuerpo técnico: ${jugadorClon.nombre} (${jugadorClon.edad} años) pierde precisión y lucidez en ${nombresAmigables[attrElegido] || String(attrElegido)}.`
+          );
         }
       }
     }
@@ -704,8 +768,13 @@ const ejecutarPasoDelTiempo = (
     if (esLunes && jugadorClon.idEquipo === equipoUsuarioId) {
       // 1. Entrenamiento Club (Físico o Técnico)
       if (enfoqueEntrenamiento === 'Físico') {
-        if (jugadorClon.edad < 23 && jugadorClon.ca < jugadorClon.pa) {
-          if (Math.random() < 0.35) {
+        if (jugadorClon.ca < jugadorClon.pa) {
+          let probEntrenamiento = 0;
+          if (jugadorClon.edad < 23) probEntrenamiento = 0.35;
+          else if (jugadorClon.edad >= 23 && jugadorClon.edad <= 27) probEntrenamiento = 0.15;
+          else if (jugadorClon.edad >= 28 && jugadorClon.edad <= 32) probEntrenamiento = 0.05;
+
+          if (probEntrenamiento > 0 && Math.random() < probEntrenamiento) {
             const attr = Math.random() < 0.5 ? 'velocidad' : 'resistencia';
             if (jugadorClon.atributos[attr] < 20) {
               jugadorClon.atributos[attr] = jugadorClon.atributos[attr] + 1;
@@ -717,8 +786,13 @@ const ejecutarPasoDelTiempo = (
           }
         }
       } else if (enfoqueEntrenamiento === 'Técnico') {
-        if (jugadorClon.edad < 23 && jugadorClon.ca < jugadorClon.pa) {
-          if (Math.random() < 0.35) {
+        if (jugadorClon.ca < jugadorClon.pa) {
+          let probEntrenamiento = 0;
+          if (jugadorClon.edad < 23) probEntrenamiento = 0.35;
+          else if (jugadorClon.edad >= 23 && jugadorClon.edad <= 27) probEntrenamiento = 0.15;
+          else if (jugadorClon.edad >= 28 && jugadorClon.edad <= 32) probEntrenamiento = 0.05;
+
+          if (probEntrenamiento > 0 && Math.random() < probEntrenamiento) {
             const techAttrs: (keyof AtributosJugador)[] = ['remate', 'pase', 'regate', 'tecnica', 'defensa'];
             const attr = techAttrs[Math.floor(Math.random() * techAttrs.length)];
             if (jugadorClon.atributos[attr] < 20) {
@@ -735,8 +809,12 @@ const ejecutarPasoDelTiempo = (
       // 2. Entrenamiento Individual
       if (jugadorClon.entrenamientoIndividual) {
         const attr = jugadorClon.entrenamientoIndividual;
-        const prob = jugadorClon.edad < 23 ? 0.40 : 0.20;
-        if (Math.random() < prob && jugadorClon.ca < jugadorClon.pa) {
+        let probIndividual = 0;
+        if (jugadorClon.edad < 23) probIndividual = 0.40;
+        else if (jugadorClon.edad >= 23 && jugadorClon.edad <= 27) probIndividual = 0.20;
+        else if (jugadorClon.edad >= 28 && jugadorClon.edad <= 32) probIndividual = 0.05;
+
+        if (probIndividual > 0 && Math.random() < probIndividual && jugadorClon.ca < jugadorClon.pa) {
           if (jugadorClon.atributos[attr] < 20) {
             jugadorClon.atributos[attr] = jugadorClon.atributos[attr] + 1;
             jugadorClon.ca = Math.min(jugadorClon.pa, jugadorClon.ca + 1);
@@ -1126,8 +1204,10 @@ const generarReunionPrivada = (plantelCompleto: Jugador[], equipoUsuarioId: stri
   // Jugadores que tienen promesas incumplidas (estado === 'Incumplida')
   const conPromesaIncumplida = plantel.filter(j => j.promesas && j.promesas.some(p => p.estado === 'Incumplida'));
 
-  // Si no hay promesas incumplidas, buscar jugadores con moral por debajo de 30
-  const candidatos = conPromesaIncumplida.length > 0 ? conPromesaIncumplida : plantel.filter(j => j.moral < 30);
+  // Si no hay promesas incumplidas, buscar jugadores con moral por debajo de 30 que no sean titulares y estén en el banco hace tiempo
+  const candidatos = conPromesaIncumplida.length > 0 
+    ? conPromesaIncumplida 
+    : plantel.filter(j => j.moral < 30 && !j.titular && (j.partidosSeguidosBanco || 0) >= 2);
   if (candidatos.length === 0) return null;
 
   // Ordenar candidatos por moral ascendente para elegir al de menor moral
@@ -1270,7 +1350,18 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [historialTitulos, setHistorialTitulos] = useState<string[]>([]);
   const [juegoIniciado, setJuegoIniciado] = useState<boolean>(false);
   const [reunionPrivadaActiva, setReunionPrivadaActiva] = useState<ReunionPrivada | null>(null);
+  const [ultimaReunionFecha, setUltimaReunionFecha] = useState<string | null>(null);
   const [sorteoCopaActivo, setSorteoCopaActivo] = useState<SorteoCopaActivo | null>(null);
+
+  const [coeficientesLigas, setCoeficientesLigas] = useState<Record<string, number>>(() => ({
+    espana: 0,
+    inglaterra: 0,
+    italia: 0,
+    alemania: 0
+  }));
+  const [historialCampeonesCopa, setHistorialCampeonesCopa] = useState<string[]>([]);
+  const [ligaDecadente, setLigaDecadente] = useState<string | null>(null);
+  const [ligasSuperPredispuestas, setLigasSuperPredispuestas] = useState<string[]>([]);
 
   const [sorteoCampeonesGruposVisto, setSorteoCampeonesGruposVisto] = useState<boolean>(false);
   const [sorteoCampeonesCuartosVisto, setSorteoCampeonesCuartosVisto] = useState<boolean>(false);
@@ -1344,6 +1435,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           if (state.reputacionManager !== undefined) setReputacionManager(state.reputacionManager);
           if (state.historialTitulos) setHistorialTitulos(state.historialTitulos);
           if (state.reunionPrivadaActiva !== undefined) setReunionPrivadaActiva(state.reunionPrivadaActiva);
+          if (state.ultimaReunionFecha !== undefined) setUltimaReunionFecha(state.ultimaReunionFecha);
           if (state.sorteoCopaActivo !== undefined) setSorteoCopaActivo(state.sorteoCopaActivo);
           if (state.sorteoCampeonesGruposVisto !== undefined) setSorteoCampeonesGruposVisto(state.sorteoCampeonesGruposVisto);
           if (state.sorteoCampeonesCuartosVisto !== undefined) setSorteoCampeonesCuartosVisto(state.sorteoCampeonesCuartosVisto);
@@ -1351,6 +1443,10 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           if (state.sorteoEuropaCuartosVisto !== undefined) setSorteoEuropaCuartosVisto(state.sorteoEuropaCuartosVisto);
           if (state.feedHinchada) setFeedHinchada(state.feedHinchada);
           if (state.noticias) setNoticias(state.noticias);
+          if (state.coeficientesLigas) setCoeficientesLigas(state.coeficientesLigas);
+          if (state.historialCampeonesCopa) setHistorialCampeonesCopa(state.historialCampeonesCopa);
+          if (state.ligaDecadente !== undefined) setLigaDecadente(state.ligaDecadente);
+          if (state.ligasSuperPredispuestas) setLigasSuperPredispuestas(state.ligasSuperPredispuestas);
           
           setJuegoIniciado(true);
         }
@@ -1359,8 +1455,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       console.error('Error al cargar la partida guardada:', e);
     }
   }, []);
-
-  // --- GUARDADO AUTOMÁTICO DE PARTIDA (LOCALSTORAGE) ---
+// --- GUARDADO AUTOMÁTICO DE PARTIDA (LOCALSTORAGE) ---
   React.useEffect(() => {
     if (juegoIniciado) {
       try {
@@ -1392,13 +1487,18 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           jugadoresAgentes,
           subastaCrisis,
           reunionPrivadaActiva,
+          ultimaReunionFecha,
           sorteoCopaActivo,
           sorteoCampeonesGruposVisto,
           sorteoCampeonesCuartosVisto,
           sorteoEuropaGruposVisto,
           sorteoEuropaCuartosVisto,
           recordsClub,
-          feedHinchada
+          feedHinchada,
+          coeficientesLigas,
+          historialCampeonesCopa,
+          ligaDecadente,
+          ligasSuperPredispuestas
         };
         localStorage.setItem('football_manager_save_state', JSON.stringify(stateToSave));
       } catch (e) {
@@ -1435,13 +1535,17 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     jugadoresAgentes,
     subastaCrisis,
     reunionPrivadaActiva,
+    ultimaReunionFecha,
     sorteoCopaActivo,
     sorteoCampeonesGruposVisto,
     sorteoCampeonesCuartosVisto,
     sorteoEuropaGruposVisto,
     sorteoEuropaCuartosVisto,
     recordsClub,
-    feedHinchada
+    feedHinchada,
+    coeficientesLigas,
+    historialCampeonesCopa,
+    ligasSuperPredispuestas
   ]);
 
   // Obtener si un equipo está bajo el Modo Presión en las últimas 5 jornadas
@@ -1934,7 +2038,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         const egresosSueldos = clubPlayers.reduce((sum, j) => sum + j.salarioSemanal, 0);
 
         // Ingresos: Sponsors semanales
-        const ingresosSponsors = Math.round((club.reputacion * 150000) / 4);
+        const ingresosSponsors = Math.round(((club.reputacion * 150000) / 4) * (club.sponsorMultiplicador || 1.0));
 
         // Actualizar acumuladores FFP para todos los clubes
         const ffpSueldos = (club.ffpSueldosGastados || 0) + egresosSueldos;
@@ -1987,7 +2091,9 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           presupuestoFichajes: nuevoPresupuesto,
           ffpSueldosGastados: ffpSueldos,
           ffpIngresosTotales: ffpIngresos,
-          enCrisisAcreedores: enCrisis
+          enCrisisAcreedores: enCrisis,
+          semanaCharlaRealizada: false,
+          semanaActividadRealizada: false
         };
       });
     });
@@ -2325,17 +2431,68 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   // Avanzar al día siguiente e implementar el descanso físico / simulación de partidos
   const avanzarDia = useCallback(() => {
+    // Validación de Once Completo en día de partido
+    if (equipoUsuarioId) {
+      const championsJornada = obtenerJornadaCopaHoy(fechaActual, copaCampeones);
+      const europaJornada = obtenerJornadaCopaHoy(fechaActual, copaEuropa);
+      const jornadaHoy = fixture.find(j => j.fecha === fechaActual);
+
+      let userPlaysToday = false;
+      if (jornadaHoy && jornadaHoy.partidos.some(p => p.localId === equipoUsuarioId || p.visitanteId === equipoUsuarioId)) {
+        userPlaysToday = true;
+      }
+      if (!userPlaysToday && championsJornada && copaCampeones) {
+        for (const jg of championsJornada.matchdays) {
+          if (jg.partidos.some(p => p.localId === equipoUsuarioId || p.visitanteId === equipoUsuarioId)) {
+            userPlaysToday = true;
+            break;
+          }
+        }
+      }
+      if (!userPlaysToday && europaJornada && copaEuropa) {
+        for (const jg of europaJornada.matchdays) {
+          if (jg.partidos.some(p => p.localId === equipoUsuarioId || p.visitanteId === equipoUsuarioId)) {
+            userPlaysToday = true;
+            break;
+          }
+        }
+      }
+
+      if (userPlaysToday) {
+        const titularesUsuario = jugadores.filter(j => j.idEquipo === equipoUsuarioId && j.titular);
+        if (titularesUsuario.length < 11) {
+          alert(`❌ [Alineación Incompleta] No puedes disputar el partido de hoy porque tu once titular en la "Pizarra Táctica" no está completo (tienes ${titularesUsuario.length}/11 titulares asignados). Por favor, ve a la sección Táctica y completa la alineación.`);
+          return;
+        }
+      }
+    }
+
     // Interceptor: Reuniones Privadas en la Oficina
     if (equipoUsuarioId && !eventoActivo) {
       if (reunionPrivadaActiva) return;
-      const meeting = generarReunionPrivada(jugadores, equipoUsuarioId);
-      if (meeting) {
-        setReunionPrivadaActiva(meeting);
-        setNoticias(prev => [
-          `🚪 [Oficina del Mánager] ${meeting.jugadorNombre} está esperando en tu oficina para hablar. Debes atenderlo antes de continuar.`,
-          ...prev
-        ]);
-        return;
+
+      // Cooldown de 7 días entre reuniones privadas
+      let puedeTenerReunion = true;
+      if (ultimaReunionFecha) {
+        const d1 = new Date(fechaActual + 'T12:00:00');
+        const d2 = new Date(ultimaReunionFecha + 'T12:00:00');
+        const diffTime = Math.abs(d1.getTime() - d2.getTime());
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        if (diffDays < 7) {
+          puedeTenerReunion = false;
+        }
+      }
+
+      if (puedeTenerReunion) {
+        const meeting = generarReunionPrivada(jugadores, equipoUsuarioId);
+        if (meeting) {
+          setReunionPrivadaActiva(meeting);
+          setNoticias(prev => [
+            `🚪 [Oficina del Mánager] ${meeting.jugadorNombre} está esperando en tu oficina para hablar. Debes atenderlo antes de continuar.`,
+            ...prev
+          ]);
+          return;
+        }
       }
     }
 
@@ -2926,6 +3083,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     fixture,
     eventoActivo,
     reunionPrivadaActiva,
+    ultimaReunionFecha,
     copaCampeones,
     copaEuropa,
     sorteoCampeonesGruposVisto,
@@ -3461,12 +3619,14 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (!jugador) return { aceptado: false, mensaje: 'Jugador no encontrado.' };
 
     const clubUsuario = equipos.find(e => e.id === equipoUsuarioId)!;
-    if (oferta > clubUsuario.presupuestoFichajes) {
+    const esLibre = !jugador.idEquipo || jugador.idEquipo === 'libre';
+    const costoFichaje = esLibre ? 0 : oferta;
+
+    if (costoFichaje > clubUsuario.presupuestoFichajes) {
       return { aceptado: false, mensaje: 'Presupuesto de fichajes insuficiente.' };
     }
 
     const clubAnterior = equipos.find(e => e.id === jugador.idEquipo);
-    const esLibre = !jugador.idEquipo || jugador.idEquipo === 'libre';
 
     // Determinar si es jugador franquicia (solo el MEJOR jugador del equipo rival, no top 10% global)
     const esJugadorFranquicia = (): boolean => {
@@ -3484,15 +3644,45 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (!esLibre) {
         return { aceptado: false, mensaje: 'Tu club está sancionado por el Fair Play Financiero y tiene prohibido comprar jugadores bajo contrato.' };
       }
-      if (oferta > 0) {
+      if (costoFichaje > 0) {
         return { aceptado: false, mensaje: 'Tu club está sancionado por el Fair Play Financiero y solo puede fichar agentes libres a coste cero.' };
       }
     }
 
     let aceptado = false;
     let mensaje = '';
-    const ratio = oferta / jugador.valorMercado;
 
+    const paisClubAnterior = clubAnterior ? obtenerPaisEquipoLocal(clubAnterior.id) : null;
+    const esDeLigaDecadente = paisClubAnterior && paisClubAnterior === ligaDecadente;
+    let valorAjustado = esDeLigaDecadente ? Math.round(jugador.valorMercado * 0.60) : jugador.valorMercado;
+
+    // Descuento por meses de contrato restantes
+    if (jugador.mesesContrato !== undefined) {
+      let factorContrato = 1.0;
+      if (jugador.mesesContrato <= 6) factorContrato = 0.50;
+      else if (jugador.mesesContrato <= 12) factorContrato = 0.70;
+      else if (jugador.mesesContrato <= 18) factorContrato = 0.85;
+      else if (jugador.mesesContrato <= 24) factorContrato = 0.95;
+      valorAjustado = Math.round(valorAjustado * factorContrato);
+    }
+
+    // Dinámica de reputación y estrella excepcional
+    const esExcepcional = jugador.ca >= 82;
+    if (esExcepcional) {
+      // "se maten por ese jugador" -> demanda un sobreprecio del 35% por competencia
+      valorAjustado = Math.round(valorAjustado * 1.35);
+    } else if (clubAnterior && clubAnterior.reputacion >= 75) {
+      // Club de alta reputación se deshace de un jugador regular de forma fácil -> 20% de facilidad/descuento
+      valorAjustado = Math.round(valorAjustado * 0.80);
+    }
+
+    const paisComprador = obtenerPaisEquipoLocal(equipoUsuarioId);
+    let factorPredisposicion = 1.0;
+    if (paisComprador && paisClubAnterior && paisComprador !== paisClubAnterior && ligasSuperPredispuestas.includes(paisComprador)) {
+      factorPredisposicion = 1.25; // 25% más predispuesto (percibe oferta un 25% mayor)
+    }
+
+    const ratio = (oferta * factorPredisposicion) / valorAjustado;
     const esDeSubasta = !!(subastaCrisis && subastaCrisis.jugadoresIds.includes(jugadorId));
 
     if (esDeSubasta) {
@@ -3504,20 +3694,33 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         mensaje = `La oferta fue rechazada. El administrador de la quiebra del ${clubAnterior?.nombre || 'club anterior'} exige al menos el 50% del valor de mercado (${formatearMoneda(Math.round(jugador.valorMercado * 0.5))}).`;
       }
     } else if (clubUsuario.ffpPenalizado && esLibre) {
-      if (oferta === 0) {
+      if (costoFichaje === 0) {
         aceptado = true;
         mensaje = `¡Fichaje Completado! ${jugador.nombre} ha aceptado unirse al ${clubUsuario.nombre} como Agente Libre a coste cero bajo la regla de excepción de Fair Play Financiero.`;
       } else {
         return { aceptado: false, mensaje: 'Tu club está sancionado por el Fair Play Financiero y solo puede fichar agentes libres a coste cero.' };
       }
     } else if (esLibre) {
-      // Reglas para agentes libres
-      if (ratio >= 0.85) {
-        aceptado = true;
-        mensaje = `¡Fichaje Completado! ${jugador.nombre} ha aceptado unirse al ${clubUsuario.nombre} como Agente Libre por la cifra de ${formatearMoneda(oferta)}. El jugador se incorpora libre de contrato.`;
-      } else {
+      aceptado = true;
+      mensaje = `¡Fichaje Completado! ${jugador.nombre} ha aceptado unirse al ${clubUsuario.nombre} como Agente Libre a coste cero.`;
+    } else if (esExcepcional) {
+      // Jugador excepcional: disputa feroz entre clubes
+      if (ratio < 1.20) {
         aceptado = false;
-        mensaje = `La propuesta fue rechazada. El representante de ${jugador.nombre} exige al menos un 85% de su valor estimado de mercado (${formatearMoneda(jugador.valorMercado * 0.85)}) como prima de fichaje.`;
+        mensaje = `El ${clubAnterior?.nombre} rechaza la propuesta por ${jugador.nombre}. Al ser un jugador de clase excepcional, hay múltiples clubes de élite ofertando y no negociarán por menos de ${formatearMoneda(valorAjustado * 1.20)}.`;
+      } else if (ratio < 1.50) {
+        // 35% de probabilidad de ganar la pulseada contra otros clubes
+        const rand = Math.random() < 0.35;
+        if (rand) {
+          aceptado = true;
+          mensaje = `¡Fichaje Estrella! El ${clubUsuario.nombre} gana la pulseada en una disputa feroz contra otros clubes grandes y logra contratar al crack ${jugador.nombre} por ${formatearMoneda(oferta)}.`;
+        } else {
+          aceptado = false;
+          mensaje = `Oferta rechazada por ${jugador.nombre}. Otro club de alta reputación superó tu oferta de ${formatearMoneda(oferta)}. Piden al menos ${formatearMoneda(valorAjustado * 1.45)}.`;
+        }
+      } else {
+        aceptado = true;
+        mensaje = `¡Bombazo del mercado! El ${clubUsuario.nombre} revienta el mercado de pases pagando un recargo competitivo y ficha a la superestrella ${jugador.nombre} por ${formatearMoneda(oferta)}.`;
       }
     } else if (esJugadorFranquicia()) {
       // Jugadores franquicia de élite: exigen prima, pero es negociable
@@ -3542,26 +3745,30 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       // Jugadores regulares: mercado más ágil y realista
       if (ratio < 0.55) {
         aceptado = false;
-        mensaje = `El ${clubAnterior?.nombre} rechaza de plano la oferta de ${formatearMoneda(oferta)} por ${jugador.nombre}. Exigen al menos ${formatearMoneda(jugador.valorMercado * 0.65)}.`;
+        mensaje = `El ${clubAnterior?.nombre} rechaza de plano la oferta de ${formatearMoneda(oferta)} por ${jugador.nombre}. Exigen al menos ${formatearMoneda(valorAjustado * 0.65)}.`;
       } else if (ratio < 0.70) {
         // 25% de probabilidad — el club podría vender si necesita liquidez
         const rand = Math.random() < 0.25;
         if (rand) {
           aceptado = true;
-          mensaje = `¡Ganga del mercado! El ${clubAnterior?.nombre} acepta ${formatearMoneda(oferta)} por ${jugador.nombre} para liberar masa salarial.`;
+          mensaje = clubAnterior && clubAnterior.reputacion >= 75
+            ? `¡Descarte de élite! El ${clubAnterior.nombre} (club top) decide liberar plantilla y acepta una oferta baja de ${formatearMoneda(oferta)} por ${jugador.nombre}.`
+            : `¡Ganga del mercado! El ${clubAnterior?.nombre} acepta ${formatearMoneda(oferta)} por ${jugador.nombre} para liberar masa salarial.`;
         } else {
           aceptado = false;
-          mensaje = `El ${clubAnterior?.nombre} rechaza la oferta de ${formatearMoneda(oferta)} por ${jugador.nombre}. Piden al menos ${formatearMoneda(jugador.valorMercado * 0.75)}.`;
+          mensaje = `El ${clubAnterior?.nombre} rechaza la oferta de ${formatearMoneda(oferta)} por ${jugador.nombre}. Piden al menos ${formatearMoneda(valorAjustado * 0.75)}.`;
         }
       } else if (ratio < 0.85) {
         // 55% de probabilidad
         const rand = Math.random() < 0.55;
         if (rand) {
           aceptado = true;
-          mensaje = `¡Acuerdo cerrado! El ${clubAnterior?.nombre} acepta transferir a ${jugador.nombre} por ${formatearMoneda(oferta)}.`;
+          mensaje = clubAnterior && clubAnterior.reputacion >= 75
+            ? `¡Acuerdo cerrado! El club de alta reputación ${clubAnterior.nombre} facilita la salida de ${jugador.nombre} por ${formatearMoneda(oferta)}.`
+            : `¡Acuerdo cerrado! El ${clubAnterior?.nombre} acepta transferir a ${jugador.nombre} por ${formatearMoneda(oferta)}.`;
         } else {
           aceptado = false;
-          mensaje = `La oferta de ${formatearMoneda(oferta)} por ${jugador.nombre} es insuficiente. El ${clubAnterior?.nombre} pide ${formatearMoneda(jugador.valorMercado * 0.90)}.`;
+          mensaje = `La oferta de ${formatearMoneda(oferta)} por ${jugador.nombre} es insuficiente. El ${clubAnterior?.nombre} pide ${formatearMoneda(valorAjustado * 0.90)}.`;
         }
       } else if (ratio < 1.05) {
         // 85% de probabilidad — oferta justa casi siempre se acepta
@@ -3571,7 +3778,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           mensaje = `¡Operación completada! El ${clubAnterior?.nombre} acepta ${formatearMoneda(oferta)} y transfiere a ${jugador.nombre}.`;
         } else {
           aceptado = false;
-          mensaje = `El ${clubAnterior?.nombre} rechaza por escaso margen. Piden ${formatearMoneda(jugador.valorMercado * 1.02)} para cerrar el acuerdo.`;
+          mensaje = `El ${clubAnterior?.nombre} rechaza por escaso margen. Piden ${formatearMoneda(valorAjustado * 1.02)} para cerrar el acuerdo.`;
         }
       } else {
         aceptado = true;
@@ -3586,15 +3793,15 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           if (e.id === equipoUsuarioId) {
             return { 
               ...e, 
-              presupuestoFichajes: e.presupuestoFichajes - oferta,
-              ffpFichajesGastados: (e.ffpFichajesGastados || 0) + oferta
+              presupuestoFichajes: e.presupuestoFichajes - costoFichaje,
+              ffpFichajesGastados: (e.ffpFichajesGastados || 0) + costoFichaje
             };
           }
           if (clubAnterior && e.id === clubAnterior.id) {
             return { 
               ...e, 
-              presupuestoFichajes: e.presupuestoFichajes + oferta,
-              ffpIngresosTotales: (e.ffpIngresosTotales || 0) + oferta
+              presupuestoFichajes: e.presupuestoFichajes + costoFichaje,
+              ffpIngresosTotales: (e.ffpIngresosTotales || 0) + costoFichaje
             };
           }
           return e;
@@ -3635,11 +3842,12 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       );
 
       // Agregar a las noticias
-      const descAdicional = tieneAmigoEnPlantel 
+      const descDecadencia = esDeLigaDecadente ? " (¡Adquirido con 40% de descuento por crisis en su liga!)" : "";
+      const descAdicional = (tieneAmigoEnPlantel 
         ? ` (¡Redujo su salario un 15% a ${formatearMoneda(salarioFinal)}/sem para jugar con su amigo!)`
-        : "";
+        : "") + descDecadencia;
       setNoticias(prev => [
-        `🤝 [Fichaje] ¡Acuerdo cerrado! El ${clubUsuario.nombre} adquiere los derechos de ${jugador.nombre} ${clubAnterior ? `procedente del ${clubAnterior.nombre}` : 'como Agente Libre'} por la cifra de ${formatearMoneda(oferta)}${descAdicional}.`,
+        `🤝 [Fichaje] ¡Acuerdo cerrado! El ${clubUsuario.nombre} adquiere los derechos de ${jugador.nombre} ${clubAnterior ? `procedente del ${clubAnterior.nombre}` : 'como Agente Libre'}${costoFichaje > 0 ? ` por la cifra de ${formatearMoneda(costoFichaje)}` : ' a coste cero'}${descAdicional}.`,
         ...prev
       ]);
 
@@ -3923,9 +4131,11 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (j.idEquipo !== equipoUsuarioId) return j;
 
       let jClon = { ...j };
+      const viejo = jugadores.find(v => v.id === jClon.id);
+      const jugo = viejo && (jClon.partidosJugados || 0) > (viejo.partidosJugados || 0);
 
-      // A. Control de Titulares
-      if (jClon.titular) {
+      // A. Control de Titulares y Jugadores que entraron al partido
+      if (jClon.titular || jugo) {
         jClon.partidosSeguidosBanco = 0;
 
         // Cumplió promesa de minutos
@@ -3943,7 +4153,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           liderNombre = jClon.nombre;
         }
       } else {
-        // B. Control de Suplentes (Banco)
+        // B. Control de Suplentes (Banco que no pisaron la cancha)
         if (!jClon.lesionado) {
           jClon.partidosSeguidosBanco = (jClon.partidosSeguidosBanco || 0) + 1;
 
@@ -3957,6 +4167,23 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           }
         }
       }
+
+      // AJUSTE DINÁMICO DE MORAL POR RESULTADO
+      const usuarioEquipo = esLocalUsuario ? local : visitante;
+      const rivalEquipo = esLocalUsuario ? visitante : local;
+      const esRivalMuchoMasFuerte = (rivalEquipo.reputacion - usuarioEquipo.reputacion) >= 10;
+
+      let cambioMoral = 0;
+      if (golesUsuario > golesRival) {
+        const extra = (golesUsuario - golesRival) >= 3 ? 4 : 0;
+        cambioMoral = jClon.titular ? (8 + extra) : (4 + extra);
+      } else if (golesUsuario === golesRival) {
+        cambioMoral = esRivalMuchoMasFuerte ? 3 : -2;
+      } else {
+        const extra = (golesRival - golesUsuario) >= 3 ? -5 : 0;
+        cambioMoral = jClon.titular ? (-10 + extra) : (-5 + extra);
+      }
+      jClon.moral = Math.max(1, Math.min(100, jClon.moral + cambioMoral));
 
       // C. Control de Promesas de Gestión (Titular Indiscutido y Penales)
       if (jClon.promesas && jClon.promesas.length > 0) {
@@ -4683,6 +4910,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         return j;
       });
     });
+    setCharlaActiva(null);
   }, [charlaActiva, equipoUsuarioId]);
 
   // Cierre y transición de temporada
@@ -4826,6 +5054,109 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const nuevoAnio = prevStartDate.getFullYear();
     const nuevaFechaActual = `${nuevoAnio}-07-01`;
 
+    // === CÁLCULO DE COEFICIENTES GEOPOLÍTICOS DE LIGAS Y RECOMPENSAS ===
+    const obtenerTodosLosPartidosCopa = (copa: CopaCampeones | null): PartidoCopa[] => {
+      if (!copa) return [];
+      const partidos: PartidoCopa[] = [];
+      if (copa.partidosGrupos) {
+        copa.partidosGrupos.forEach(g => {
+          if (g.partidos) partidos.push(...g.partidos);
+        });
+      }
+      if (copa.cuartos && copa.cuartos.partidos) {
+        partidos.push(...copa.cuartos.partidos);
+      }
+      if (copa.semifinales && copa.semifinales.partidos) {
+        partidos.push(...copa.semifinales.partidos);
+      }
+      if (copa.final && copa.final.partido) {
+        partidos.push(copa.final.partido);
+      }
+      return partidos.filter(p => p.jugado);
+    };
+
+    const puntosPorPais = { espana: 0, inglaterra: 0, italia: 0, alemania: 0 };
+    const todosPartidos = [
+      ...obtenerTodosLosPartidosCopa(copaCampeones),
+      ...obtenerTodosLosPartidosCopa(copaEuropa)
+    ];
+
+    todosPartidos.forEach(p => {
+      const paisLocal = obtenerPaisEquipoLocal(p.localId);
+      const paisVisitante = obtenerPaisEquipoLocal(p.visitanteId);
+
+      const gl = p.golesLocal || 0;
+      const gv = p.golesVisitante || 0;
+
+      if (gl > gv) {
+        puntosPorPais[paisLocal] += 2;
+      } else if (gl < gv) {
+        puntosPorPais[paisVisitante] += 2;
+      } else {
+        puntosPorPais[paisLocal] += 1;
+        puntosPorPais[paisVisitante] += 1;
+      }
+    });
+
+    // Sumar bonus de avance
+    [copaCampeones, copaEuropa].forEach(copa => {
+      if (!copa) return;
+      if (copa.cuartos && copa.cuartos.partidos) {
+        copa.cuartos.partidos.forEach(p => {
+          puntosPorPais[obtenerPaisEquipoLocal(p.localId)] += 1;
+          puntosPorPais[obtenerPaisEquipoLocal(p.visitanteId)] += 1;
+        });
+      }
+      if (copa.semifinales && copa.semifinales.partidos) {
+        copa.semifinales.partidos.forEach(p => {
+          puntosPorPais[obtenerPaisEquipoLocal(p.localId)] += 1;
+          puntosPorPais[obtenerPaisEquipoLocal(p.visitanteId)] += 1;
+        });
+      }
+      if (copa.final && copa.final.partido) {
+        puntosPorPais[obtenerPaisEquipoLocal(copa.final.partido.localId)] += 1;
+        puntosPorPais[obtenerPaisEquipoLocal(copa.final.partido.visitanteId)] += 1;
+      }
+      if (copa.campeon) {
+        puntosPorPais[obtenerPaisEquipoLocal(copa.campeon)] += 2;
+      }
+    });
+
+    // Coeficiente final: puntos totales / 8 equipos participantes
+    const nuevosCoeficientes = {
+      espana: puntosPorPais.espana / 8,
+      inglaterra: puntosPorPais.inglaterra / 8,
+      italia: puntosPorPais.italia / 8,
+      alemania: puntosPorPais.alemania / 8
+    };
+    setCoeficientesLigas(nuevosCoeficientes);
+
+    // Obtener país del campeón y actualizar historial
+    const championsWinner = copaCampeones?.campeon;
+    const championsWinnerCountry = championsWinner ? obtenerPaisEquipoLocal(championsWinner) : null;
+    let nuevoHistorial = [...historialCampeonesCopa];
+    if (championsWinnerCountry) {
+      nuevoHistorial.push(championsWinnerCountry);
+      setHistorialCampeonesCopa(nuevoHistorial);
+    }
+
+    // Verificar si ganó 2 años seguidos el mismo
+    let nuevoLigasSuper: string[] = [];
+    if (championsWinnerCountry && nuevoHistorial.length >= 2) {
+      const len = nuevoHistorial.length;
+      if (nuevoHistorial[len - 1] === championsWinnerCountry && nuevoHistorial[len - 2] === championsWinnerCountry) {
+        nuevoLigasSuper = [championsWinnerCountry];
+      }
+    }
+    setLigasSuperPredispuestas(nuevoLigasSuper);
+
+    // Liga decadente: última en coeficiente
+    const ligasOrdenadas = (Object.keys(nuevosCoeficientes) as Array<keyof typeof nuevosCoeficientes>).sort(
+      (a, b) => nuevosCoeficientes[a] - nuevosCoeficientes[b]
+    );
+    const nuevaDecadente = ligasOrdenadas[0] || null;
+    setLigaDecadente(nuevaDecadente);
+
     const tablaOrdenadaLaLiga = [...liga.tabla].sort((a, b) => {
       if (b.puntos !== a.puntos) return b.puntos - a.puntos;
       if (b.diferenciaGoles !== a.diferenciaGoles) return b.diferenciaGoles - a.diferenciaGoles;
@@ -4868,30 +5199,49 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       const idxInTabla = tablaOrdenadaLaLiga.findIndex(t => t.idEquipo === upgradedEq.id);
       if (idxInTabla === 0) {
-        return {
+        upgradedEq = {
           ...upgradedEq,
           presupuestoFichajes: upgradedEq.presupuestoFichajes + 25000000,
           reputacion: Math.min(99, upgradedEq.reputacion + 5)
         };
       } else if (idxInTabla === 1) {
-        return {
+        upgradedEq = {
           ...upgradedEq,
           presupuestoFichajes: upgradedEq.presupuestoFichajes + 15000000,
           reputacion: Math.min(99, upgradedEq.reputacion + 3)
         };
       } else if (idxInTabla === 2) {
-        return {
+        upgradedEq = {
           ...upgradedEq,
           presupuestoFichajes: upgradedEq.presupuestoFichajes + 10000000,
           reputacion: Math.min(99, upgradedEq.reputacion + 2)
         };
       } else if (idxInTabla === 3) {
-        return {
+        upgradedEq = {
           ...upgradedEq,
           presupuestoFichajes: upgradedEq.presupuestoFichajes + 5000000,
           reputacion: Math.min(99, upgradedEq.reputacion + 1)
         };
       }
+
+      // === APLICAR REPUTACIÓN DINÁMICA Y CONTRACCIÓN ECONÓMICA DE LIGAS ===
+      const paisEq = obtenerPaisEquipoLocal(upgradedEq.id);
+      let sponsorMult = upgradedEq.sponsorMultiplicador || 1.0;
+      let rep = upgradedEq.reputacion;
+
+      if (nuevoLigasSuper.includes(paisEq)) {
+        rep = Math.min(99, Math.round(rep * 1.10));
+        sponsorMult = sponsorMult * 1.20;
+      } else if (paisEq === nuevaDecadente) {
+        sponsorMult = sponsorMult * 0.70;
+      } else {
+        if (sponsorMult > 1.0) sponsorMult = Math.max(1.0, sponsorMult - 0.05);
+        if (sponsorMult < 1.0) sponsorMult = Math.min(1.0, sponsorMult + 0.05);
+      }
+
+      upgradedEq.reputacion = rep;
+      upgradedEq.sponsorMultiplicador = sponsorMult;
+
       return upgradedEq;
     });
 
@@ -4959,7 +5309,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const equiposConFFP = equiposFinTutorias.map(eq => {
       const gastos = (eq.ffpSueldosGastados || 0) + (eq.ffpFichajesGastados || 0);
       const ingresos = eq.ffpIngresosTotales || 0;
-      const limite = ingresos * 0.8;
+      const limite = ingresos * 1.0;
       
       let warnings = eq.ffpAdvertenciasConsecutivas || 0;
       let penalizado = eq.ffpPenalizado || false;
@@ -4972,7 +5322,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           sancionPuntosPendiente = true;
           if (eq.id === equipoUsuarioId) {
             noticiasFFP.push(
-              `❌ [FFP - SANCIÓN] ¡Sanción de Fair Play Financiero para tu club! Has excedido el 80% de gastos (${formatearMoneda(gastos)} gastados vs ${formatearMoneda(ingresos)} ingresados) por dos temporadas consecutivas. Comenzarás la nueva temporada con -9 puntos y no podrás comprar jugadores contratados.`
+              `❌ [FFP - SANCIÓN] ¡Sanción de Fair Play Financiero para tu club! Has excedido el 100% de gastos (${formatearMoneda(gastos)} gastados vs ${formatearMoneda(ingresos)} ingresados) por dos temporadas consecutivas. Comenzarás la nueva temporada con -9 puntos y no podrás comprar jugadores contratados.`
             );
           } else {
             noticiasFFP.push(
@@ -4982,7 +5332,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         } else {
           if (eq.id === equipoUsuarioId) {
             noticiasFFP.push(
-              `⚠️ [FFP - ALERTA] Tu club ha gastado más del 80% de sus ingresos esta temporada (${formatearMoneda(gastos)} gastados vs ${formatearMoneda(ingresos)} ingresados). Recibís una Alerta de Sanción (Advertencias: 1/2). Cuidá tus finanzas el próximo año para evitar sanciones.`
+              `⚠️ [FFP - ALERTA] Tu club ha gastado más del 100% de sus ingresos esta temporada (${formatearMoneda(gastos)} gastados vs ${formatearMoneda(ingresos)} ingresados). Recibís una Alerta de Sanción (Advertencias: 1/2). Cuidá tus finanzas el próximo año para evitar sanciones.`
             );
           } else {
             noticiasFFP.push(
@@ -5052,19 +5402,28 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       promovidos: promovidosList
     });
 
-    const nuevasNoticiasCierre = [
+    const nuevasNoticiasCierre: string[] = [
       `🏆 [Campeón de Liga] ¡Felicitaciones al ${campeonClub?.nombre || 'Club'} ${campeonClub?.escudo || ''} por consagrarse campeón de la temporada!`,
       `💰 [Premios de Liga] Se han entregado los premios financieros de fin de temporada a los 4 mejores equipos.`,
+      `📊 [Coeficientes UEFA] Coeficientes finales de temporada: España: ${nuevosCoeficientes.espana.toFixed(3)}, Inglaterra: ${nuevosCoeficientes.inglaterra.toFixed(3)}, Italia: ${nuevosCoeficientes.italia.toFixed(3)}, Alemania: ${nuevosCoeficientes.alemania.toFixed(3)}.`
+    ];
+    if (championsWinnerCountry && nuevoLigasSuper.includes(championsWinnerCountry)) {
+      nuevasNoticiasCierre.push(`🔥 [Liga de Élite] ¡${championsWinnerCountry === 'espana' ? 'España' : championsWinnerCountry === 'inglaterra' ? 'Inglaterra' : championsWinnerCountry === 'italia' ? 'Italia' : 'Alemania'} se consagra en lo más alto! Su reputación de liga sube +10% y los sponsors pagan +20%.`);
+    }
+    if (nuevaDecadente) {
+      nuevasNoticiasCierre.push(`📉 [Contracción Económica] La liga de ${nuevaDecadente === 'espana' ? 'España' : nuevaDecadente === 'inglaterra' ? 'Inglaterra' : nuevaDecadente === 'italia' ? 'Italia' : 'Alemania'} ha quedado última en coeficientes. Sus equipos reducen sus ingresos de sponsor un 30% y se ven forzados a vender barato.`);
+    }
+    nuevasNoticiasCierre.push(
       `🏁 [Fin de Temporada] Ha concluido oficialmente la temporada. ¡Bienvenido a la nueva temporada ${nuevaTemporadaName}!`,
       `📦 [Academia] Se ha publicado el Informe de la Academia con las nuevas promesas de la cantera.`,
       `🏆 [Copas Internacionales] Se han sorteado los fixtures de la Copa de Campeones y la Copa Continental para la nueva temporada.`,
       ...noticiasCopaRota,
       ...noticiasFinTutorias,
       ...noticiasFFP
-    ];
+    );
 
-    setNoticias(prev => [...nuevasNoticiasCierre, ...prev]);
-  }, [jugadores, equipos, liga, fixture, equipoUsuarioId]);
+    setNoticias(prev => [...nuevasNoticiasCierre.filter(Boolean), ...prev]);
+  }, [jugadores, equipos, liga, fixture, equipoUsuarioId, coeficientesLigas, historialCampeonesCopa, ligaDecadente, ligasSuperPredispuestas]);
 
   const cerrarReporteAcademia = useCallback(() => {
     setReporteAcademia(null);
@@ -5257,6 +5616,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (!reunionPrivadaActiva || !equipoUsuarioId) return;
 
     const { jugadorId, jugadorNombre } = reunionPrivadaActiva;
+    setUltimaReunionFecha(fechaActual);
 
     setJugadores(prev => prev.map(j => {
       if (j.id !== jugadorId) return j;
@@ -5300,7 +5660,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     setNoticias(prev => [msgs[decision], ...prev]);
     setReunionPrivadaActiva(null);
-  }, [reunionPrivadaActiva, equipoUsuarioId, reputacionManager]);
+  }, [reunionPrivadaActiva, equipoUsuarioId, reputacionManager, fechaActual]);
 
   // ============================================================
   // ACEPTAR OFERTA DE EMPLEO
@@ -5534,8 +5894,17 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       return { aceptado: false, mensaje: "Tu club está sancionado por el Fair Play Financiero y tiene prohibido negociar precontratos Bosman." };
     }
     
-    // --- DESCUENTO POR AFINIDAD (AMIGO EN EL PLANTEL) ---
+    // --- DESCUENTO POR AFINIDAD (AMIGO EN EL PLANTEL) Y PREDISPOSICIÓN DE LIGA ---
+    const paisComprador = obtenerPaisEquipoLocal(equipoUsuarioId);
+    const paisVendedor = v.idEquipo && v.idEquipo !== 'libre' ? obtenerPaisEquipoLocal(v.idEquipo) : null;
+    let factorPredisposicionSueldo = 1.0;
+    if (paisComprador && paisVendedor && paisComprador !== paisVendedor && ligasSuperPredispuestas.includes(paisComprador)) {
+      factorPredisposicionSueldo = 0.80; // 20% de rebaja en demandas salariales
+    }
+
     let minSalary = Math.max(v.salarioSemanal * 1.15, Math.round(v.ca ** 2 * 35));
+    minSalary = Math.round(minSalary * factorPredisposicionSueldo);
+
     const tieneAmigoEnPlantel = v.idAmigos?.some(friendId => 
       jugadores.some(j => j.id === friendId && j.idEquipo === equipoUsuarioId)
     );
@@ -5548,7 +5917,8 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     if (salarioSemanal >= minSalary) {
       ok = true;
-      const descAdicional = tieneAmigoEnPlantel ? " (¡Aceptó un sueldo 15% menor para reunirse con su socio!)" : "";
+      const descPredisp = factorPredisposicionSueldo < 1.0 ? " (¡Aceptó un sueldo 20% menor atraído por el prestigio de nuestra liga!)" : "";
+      const descAdicional = (tieneAmigoEnPlantel ? " (¡Aceptó un sueldo 15% menor para reunirse con su socio!)" : "") + descPredisp;
       msg = `¡Preacuerdo Firmado! ${v.nombre} ha aceptado tus términos de contrato (${formatearMoneda(salarioSemanal)}/sem y cláusula de ${clausulaRescision ? formatearMoneda(clausulaRescision) : 'Sin cláusula'})${descAdicional}. Se unirá al ${F.nombre} libre de contrato el 1 de Julio.`;
       setJugadores(prev => prev.map(j => j.id === jugadorId ? { ...j, preacuerdoClubId: equipoUsuarioId, preacuerdoSalario: salarioSemanal, preacuerdoClausula: clausulaRescision } : j));
       setNoticias(prev => [`🤝 [Preacuerdo Bosman] ¡Acuerdo para la próxima temporada! El mánager del ${F.nombre} ha cerrado la incorporación libre de ${v.nombre} para el próximo 1 de Julio.`, ...prev]);
@@ -5642,7 +6012,11 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         recordModalActivo,
         cerrarRecordModal,
         obtenerModoPresionEquipo,
-        subastaCrisis
+        subastaCrisis,
+        coeficientesLigas,
+        historialCampeonesCopa,
+        ligaDecadente,
+        ligasSuperPredispuestas
       }}
     >
       {children}

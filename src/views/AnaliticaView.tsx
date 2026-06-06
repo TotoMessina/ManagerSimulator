@@ -81,6 +81,61 @@ export const AnaliticaView: React.FC = () => {
   const [busquedaGanga, setBusquedaGanga] = useState('');
   const [ordenGanga, setOrdenGanga] = useState<'eficiencia' | 'calificacion' | 'goles' | 'precio'>('eficiencia');
 
+  // --- CÁLCULO DE NECESIDADES DEL PLANTEL DEL USUARIO ---
+  const { promedioCA, posicionesNecesarias } = useMemo(() => {
+    if (!equipoUsuarioId) return { promedioCA: 0, posicionesNecesarias: [] as Posicion[] };
+
+    const plantelUsuario = jugadores.filter(j => j.idEquipo === equipoUsuarioId);
+    if (plantelUsuario.length === 0) return { promedioCA: 0, posicionesNecesarias: [] as Posicion[] };
+
+    const totalCA = plantelUsuario.reduce((sum, j) => sum + j.ca, 0);
+    const avgCA = totalCA / plantelUsuario.length;
+
+    // Agrupar jugadores por posición para analizar cantidad y calidad
+    const porPosicion: Record<Posicion, { count: number; sumaCA: number; promedioCA: number }> = {} as any;
+    
+    // Inicializar posiciones
+    const todasLasPosiciones: Posicion[] = ['POR', 'DFC', 'LD', 'LI', 'MC', 'MCO', 'ED', 'EI', 'DC'];
+    todasLasPosiciones.forEach(pos => {
+      porPosicion[pos] = { count: 0, sumaCA: 0, promedioCA: 0 };
+    });
+
+    plantelUsuario.forEach(j => {
+      if (porPosicion[j.posicion]) {
+        porPosicion[j.posicion].count += 1;
+        porPosicion[j.posicion].sumaCA += j.ca;
+      }
+    });
+
+    todasLasPosiciones.forEach(pos => {
+      const p = porPosicion[pos];
+      p.promedioCA = p.count > 0 ? p.sumaCA / p.count : 0;
+    });
+
+    const scores = todasLasPosiciones.map(pos => {
+      const p = porPosicion[pos];
+      let score = 0;
+      if (p.count === 0) {
+        score = 150; // Prioridad ultra alta
+      } else {
+        score = (avgCA - p.promedioCA);
+        const minRecomendado = pos === 'POR' || pos === 'DFC' || pos === 'MC' || pos === 'DC' ? 2 : 1;
+        if (p.count < minRecomendado) {
+          score += 20;
+        }
+      }
+      return { pos, score };
+    });
+
+    const ordenadas = scores.sort((a, b) => b.score - a.score);
+    const necesarias = ordenadas.slice(0, 2).map(item => item.pos);
+
+    return {
+      promedioCA: Math.round(avgCA),
+      posicionesNecesarias: necesarias
+    };
+  }, [jugadores, equipoUsuarioId]);
+
   // --- JUGADORES FILTRADOS PARA SELECTORES ---
   const jugadoresFiltradosA = useMemo(() => {
     if (!buscarA.trim()) return jugadores.slice(0, 10);
@@ -147,14 +202,32 @@ export const AnaliticaView: React.FC = () => {
       const val = j.valorMercado || 1000000;
       
       // Índice de Inteligencia Deportiva: Calificación respecto a su coste
-      // Los jugadores con buen rendimiento de partidos jugados y valor sensato encabezan la lista
-      const eficiencia = Math.round((calif * calif * 12000000) / val);
+      let baseEficiencia = Math.round((calif * calif * 12000000) / val);
+      
+      // Modificadores contextuales basados en necesidades del usuario
+      if (equipoUsuarioId) {
+        if (posicionesNecesarias.includes(j.posicion)) {
+          baseEficiencia = Math.round(baseEficiencia * 1.3);
+        }
+        if (j.ca >= promedioCA) {
+          baseEficiencia = Math.round(baseEficiencia * 1.3);
+        } else if (j.ca < promedioCA - 12) {
+          baseEficiencia = Math.round(baseEficiencia * 0.4);
+        } else if (j.ca < promedioCA - 5) {
+          baseEficiencia = Math.round(baseEficiencia * 0.7);
+        }
+      }
+
+      const eficiencia = baseEficiencia;
       
       // Clasificación de gangas
       let gangaLabel = 'Rendimiento Estándar';
       let gangaColor = 'bg-slate-500/10 text-slate-400 border-slate-500/20';
 
-      if (calif >= 7.00 && val <= 15000000) {
+      if (equipoUsuarioId && posicionesNecesarias.includes(j.posicion) && j.ca >= promedioCA - 5) {
+        gangaLabel = '🎯 Refuerzo Sugerido';
+        gangaColor = 'bg-teal-500/15 text-teal-400 border-teal-500/30';
+      } else if (calif >= 7.00 && val <= 15000000) {
         gangaLabel = '🔥 Ganga Absoluta';
         gangaColor = 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30 animate-pulse';
       } else if (calif >= 7.30) {
@@ -190,7 +263,7 @@ export const AnaliticaView: React.FC = () => {
       if (ordenGanga === 'precio') return a.val - b.val;
       return b.eficiencia - a.eficiencia;
     });
-  }, [jugadores, equipos, filtroPosicion, busquedaGanga, ordenGanga]);
+  }, [jugadores, equipos, filtroPosicion, busquedaGanga, ordenGanga, equipoUsuarioId, promedioCA, posicionesNecesarias]);
 
   return (
     <div className="space-y-6">
@@ -540,6 +613,23 @@ export const AnaliticaView: React.FC = () => {
       {/* ── SECCIÓN 2: FILTRO DE RENDIMIENTO ESCALONADO (BARGAIN HUNTER) ── */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-6">
         
+        {equipoUsuarioId && posicionesNecesarias.length > 0 && (
+          <div className="bg-gradient-to-r from-teal-500/10 to-blue-500/10 border border-teal-500/20 rounded-xl p-4 flex items-center justify-between gap-4 flex-wrap">
+            <div className="flex items-center gap-3">
+              <span className="text-2xl">💡</span>
+              <div>
+                <div className="text-xs font-extrabold text-slate-200">Recomendaciones del Cuerpo Técnico</div>
+                <div className="text-[10px] text-slate-400 mt-0.5 leading-relaxed">
+                  Tu plantel tiene una calidad media de <strong className="text-teal-400 font-mono">{promedioCA} CA</strong>. Se sugiere reforzar las posiciones de: <strong className="text-teal-400 font-semibold">{posicionesNecesarias.map(p => posNombre[p] || p).join(' y ')}</strong>.
+                </div>
+              </div>
+            </div>
+            <div className="px-3 py-1 bg-slate-950/80 border border-slate-800 rounded-lg text-[10px] font-bold text-slate-400 tracking-wide">
+              {posicionesNecesarias.length} Posiciones Críticas
+            </div>
+          </div>
+        )}
+
         {/* Controles del Listado */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-800 pb-4">
           <div>

@@ -4,9 +4,18 @@ import { PartidoCopa } from '../types';
 import { equiposLaLiga, equiposPremier, equiposSerieA, equiposBundesliga } from '../data/initialData';
 
 export const CopaInternacionalView: React.FC = () => {
-  const { copaCampeones, copaEuropa, equipos, equipoUsuario } = useGame();
+  const { 
+    copaCampeones, 
+    copaEuropa, 
+    equipos, 
+    equipoUsuario,
+    coeficientesLigas,
+    historialCampeonesCopa,
+    ligaDecadente,
+    ligasSuperPredispuestas
+  } = useGame();
   const [activeCup, setActiveCup] = useState<'champions' | 'europa'>('champions');
-  const [activeTab, setActiveTab] = useState<'grupos' | 'eliminatorias'>('grupos');
+  const [activeTab, setActiveTab] = useState<'grupos' | 'eliminatorias' | 'coeficientes'>('grupos');
   const [jornadaSeleccionada, setJornadaSeleccionada] = useState<number>(1);
   const [grupoSeleccionado, setGrupoSeleccionado] = useState<'A' | 'B' | 'C' | 'D'>('A');
 
@@ -149,6 +158,16 @@ export const CopaInternacionalView: React.FC = () => {
           }`}
         >
           🌳 Eliminatorias Directas
+        </button>
+        <button
+          onClick={() => setActiveTab('coeficientes')}
+          className={`px-5 py-2.5 rounded-xl text-xs font-bold tracking-wider transition-all uppercase flex items-center gap-1.5 ${
+            activeTab === 'coeficientes' 
+              ? (activeCup === 'champions' ? 'bg-indigo-650 text-white shadow-md shadow-indigo-900/25' : 'bg-blue-650 text-white shadow-md shadow-blue-900/25')
+              : 'text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          📊 Coeficientes de Ligas
         </button>
       </div>
 
@@ -635,6 +654,133 @@ export const CopaInternacionalView: React.FC = () => {
             </div>
           )}
 
+        </div>
+      )}
+
+      {activeTab === 'coeficientes' && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start animate-fade-in">
+          {/* Tabla de Coeficientes de Ligas (COL-SPAN 2) */}
+          <div className="lg:col-span-2 space-y-6">
+            <div className="bg-slate-900/40 border border-slate-800/80 rounded-2xl overflow-hidden shadow-lg backdrop-blur-md">
+              <div className="p-4 bg-slate-950/60 border-b border-slate-850 flex justify-between items-center">
+                <h3 className="text-xs font-extrabold text-slate-350 uppercase tracking-widest">
+                  Tabla de Coeficientes UEFA y Reputación de Ligas
+                </h3>
+                <span className="text-[10px] text-slate-500 font-mono">Actualizado al Fin de Temporada</span>
+              </div>
+
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-slate-950/30 border-b border-slate-850 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                    <th className="px-4 py-3 text-center w-12">Pos</th>
+                    <th className="px-3 py-3">Liga / País</th>
+                    <th className="px-3 py-3 text-center w-28">Coeficiente Temp.</th>
+                    <th className="px-4 py-3 text-center w-48">Estado y Reputación</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/30">
+                  {(() => {
+                    const ligasData = [
+                      { id: 'espana', nombre: 'La Liga EA Sports', pais: 'España', bandera: '🇪🇸' },
+                      { id: 'inglaterra', nombre: 'Premier League', pais: 'Inglaterra', bandera: '🏴󠁧󠁢󠁥󠁮󠁧󠁿' },
+                      { id: 'italia', nombre: 'Serie A Enilive', pais: 'Italia', bandera: '🇮🇹' },
+                      { id: 'alemania', nombre: 'Bundesliga', pais: 'Alemania', bandera: '🇩🇪' }
+                    ];
+
+                    const sortedLigas = ligasData.map(l => ({
+                      ...l,
+                      coef: coeficientesLigas?.[l.id] ?? 0
+                    })).sort((a, b) => b.coef - a.coef);
+
+                    return sortedLigas.map((l, idx) => {
+                      const esSuper = ligasSuperPredispuestas?.includes(l.id);
+                      const esDecadente = ligaDecadente === l.id;
+                      
+                      return (
+                        <tr key={l.id} className="hover:bg-slate-800/20 transition-colors">
+                          <td className="px-4 py-4 text-center font-bold font-mono">
+                            <span className={`inline-flex w-5 h-5 rounded-full items-center justify-center text-[10px] ${
+                              idx === 0 
+                                ? 'bg-amber-500/15 text-amber-400 border border-amber-500/25' 
+                                : idx === 3 
+                                  ? 'bg-rose-500/15 text-rose-400 border border-rose-500/25'
+                                  : 'bg-slate-950 text-slate-550 border border-slate-850'
+                            }`}>
+                              {idx + 1}
+                            </span>
+                          </td>
+                          <td className="px-3 py-4">
+                            <div className="font-bold text-slate-200 flex items-center gap-2">
+                              <span className="text-sm">{l.bandera}</span>
+                              <div>
+                                <div>{l.nombre}</div>
+                                <div className="text-[10px] text-slate-500 font-normal">{l.pais}</div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-3 py-4 text-center font-extrabold font-mono text-slate-300 text-sm">
+                            {(l.coef).toFixed(3)}
+                          </td>
+                          <td className="px-4 py-4 text-center">
+                            {esSuper ? (
+                              <span className="inline-flex flex-col items-center px-2.5 py-1 bg-amber-500/10 border border-amber-500/25 rounded-xl text-amber-300 font-black text-[9px] uppercase tracking-wide shadow-sm shadow-amber-950/20">
+                                <span>🏆 Liga de Élite</span>
+                                <span className="text-[8px] font-semibold text-slate-400 normal-case mt-0.5">+10% Rep · +20% Sponsor · Afinidad</span>
+                              </span>
+                            ) : esDecadente ? (
+                              <span className="inline-flex flex-col items-center px-2.5 py-1 bg-red-500/10 border border-red-500/25 rounded-xl text-rose-400 font-black text-[9px] uppercase tracking-wide shadow-sm shadow-red-950/20 animate-pulse">
+                                <span>📉 En Decadencia</span>
+                                <span className="text-[8px] font-semibold text-slate-400 normal-case mt-0.5">-30% Sponsor · -40% Fichaje</span>
+                              </span>
+                            ) : (
+                              <span className="inline-flex px-2.5 py-1 bg-slate-950 border border-slate-850 rounded-xl text-emerald-400 font-bold text-[9px] uppercase tracking-wide">
+                                🟢 Estable
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    });
+                  })()}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Historial de Campeones (COL-SPAN 1) */}
+          <div className="bg-slate-900/40 border border-slate-800/80 rounded-2xl p-5 shadow-lg backdrop-blur-md min-h-[300px] flex flex-col justify-between">
+            <div>
+              <h3 className="text-sm font-bold text-white mb-4 border-b border-slate-800 pb-2">
+                🏆 Historial de Campeones Copas
+              </h3>
+              
+              <div className="space-y-2.5 max-h-[220px] overflow-y-auto pr-1">
+                {(!historialCampeonesCopa || historialCampeonesCopa.length === 0) ? (
+                  <p className="text-xs text-slate-500 italic text-center py-6">
+                    Sin registros históricos de campeones continentales. Esperando finalizar la primera temporada.
+                  </p>
+                ) : (
+                  historialCampeonesCopa.map((pais, index) => {
+                    const lName = pais === 'espana' ? 'España' : pais === 'inglaterra' ? 'Inglaterra' : pais === 'italia' ? 'Italia' : 'Alemania';
+                    const bandera = pais === 'espana' ? '🇪🇸' : pais === 'inglaterra' ? '🏴󠁧󠁢󠁥󠁮󠁧󠁿' : pais === 'italia' ? '🇮🇹' : '🇩🇪';
+                    return (
+                      <div key={index} className="flex justify-between items-center bg-slate-950/50 border border-slate-850 px-3 py-2 rounded-xl text-xs">
+                        <span className="font-semibold text-slate-400 font-mono">Temporada {index + 1}</span>
+                        <span className="font-bold text-slate-200 flex items-center gap-1.5">
+                          <span>{bandera}</span>
+                          <span>{lName}</span>
+                        </span>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
+            <div className="text-[10px] text-slate-500 border-t border-slate-850 pt-3 leading-relaxed mt-4">
+              📌 <strong>Reglas Geopolíticas:</strong> Si una liga gana la Copa de Campeones 2 temporadas consecutivas, se consagra como <strong>Liga de Élite</strong>. Si queda última en el coeficiente anual de rendimiento internacional, entra en <strong>Decadencia Económica</strong>.
+            </div>
+          </div>
         </div>
       )}
 

@@ -448,7 +448,7 @@ export const ClubView: React.FC = () => {
                 const ingresosTotalesFFP = equipoUsuario.ffpIngresosTotales || 0;
                 
                 const ratioFFP = ingresosTotalesFFP > 0 ? (gastosTotalesFFP / ingresosTotalesFFP) * 100 : 0;
-                const limiteFFP = ingresosTotalesFFP * 0.8;
+                const limiteFFP = ingresosTotalesFFP * 1.0;
 
                 return (
                   <div className="space-y-3.5 text-xs">
@@ -458,7 +458,7 @@ export const ClubView: React.FC = () => {
                         <span className="font-bold text-slate-200 block mt-0.5">{formatearEuros(ingresosTotalesFFP)}</span>
                       </div>
                       <div>
-                        <span className="text-slate-500 block">Límite Permitido (80%):</span>
+                        <span className="text-slate-500 block">Límite Permitido (100%):</span>
                         <span className="font-bold text-slate-200 block mt-0.5">{formatearEuros(limiteFFP)}</span>
                       </div>
                     </div>
@@ -471,7 +471,7 @@ export const ClubView: React.FC = () => {
                       </div>
                       <div>
                         <span className="text-slate-500 block">Relación de Gastos:</span>
-                        <span className={`font-black block mt-0.5 ${ratioFFP > 80 ? 'text-rose-450 animate-pulse' : ratioFFP > 70 ? 'text-amber-300' : 'text-emerald-400'}`}>
+                        <span className={`font-black block mt-0.5 ${ratioFFP > 100 ? 'text-rose-450 animate-pulse' : ratioFFP > 90 ? 'text-amber-300' : 'text-emerald-400'}`}>
                           {ratioFFP.toFixed(1)}%
                         </span>
                       </div>
@@ -480,14 +480,14 @@ export const ClubView: React.FC = () => {
                     {/* Barra de progreso de gastos FFP */}
                     <div className="space-y-1 pt-1">
                       <div className="w-full bg-slate-950 rounded-full h-2 overflow-hidden border border-slate-850 relative">
-                        {/* Marcador del 80% */}
-                        <div className="absolute top-0 bottom-0 left-[80%] w-0.5 bg-rose-500 z-10" title="Límite del 80%" />
+                        {/* Marcador del 100% */}
+                        <div className="absolute top-0 bottom-0 left-[100%] w-0.5 bg-rose-500 z-10" title="Límite del 100%" />
                         <div 
                           style={{ width: `${Math.min(100, ratioFFP)}%` }}
                           className={`h-full rounded-full transition-all duration-500 ${
-                            ratioFFP > 80 
+                            ratioFFP > 100 
                               ? 'bg-rose-500' 
-                              : ratioFFP > 70 
+                              : ratioFFP > 90 
                                 ? 'bg-amber-500' 
                                 : 'bg-emerald-500'
                           }`}
@@ -495,7 +495,7 @@ export const ClubView: React.FC = () => {
                       </div>
                       <div className="flex justify-between text-[9px] text-slate-500 font-mono">
                         <span>0%</span>
-                        <span className="text-rose-400 font-bold">Límite 80%</span>
+                        <span className="text-rose-400 font-bold">Límite 100%</span>
                         <span>100%</span>
                       </div>
                     </div>
@@ -506,13 +506,13 @@ export const ClubView: React.FC = () => {
                         <span className="text-rose-400 font-semibold block">
                           ⚠️ **Sanción Activa**: Tu club ha infringido el FFP por dos temporadas consecutivas. Tienes prohibidas las transferencias pagadas y comenzarás con **-9 puntos** la próxima temporada.
                         </span>
-                      ) : ratioFFP > 80 ? (
+                      ) : ratioFFP > 100 ? (
                         <span className="text-rose-400 font-semibold block">
                           ⚠️ **Límite Excedido**: Estás sobrepasando el límite de FFP. Si terminas la temporada así, recibirás una advertencia de sanción.
                         </span>
                       ) : (
                         <span>
-                          ℹ️ **Regla de Fair Play Financiero (FFP)**: Para evitar sanciones, los gastos anuales de tu club (sueldos + fichajes) no deben superar el **80%** de tus ingresos totales.
+                          ℹ️ **Regla de Fair Play Financiero (FFP)**: Para evitar sanciones, los gastos anuales de tu club (sueldos + fichajes) no deben superar el **100%** de tus ingresos totales.
                         </span>
                       )}
                     </div>

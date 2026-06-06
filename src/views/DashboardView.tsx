@@ -102,6 +102,8 @@ export const DashboardView: React.FC = () => {
 
   if (!equipoUsuario) return null;
 
+  const tieneOnceCompleto = jugadores.filter(j => j.idEquipo === equipoUsuario.id && j.titular).length === 11;
+
   // --- DETECTAR JORNADA Y ENCUENTROS ---
   const jornadaHoy = fixture.find(j => j.fecha === fechaActual);
 
@@ -440,6 +442,15 @@ export const DashboardView: React.FC = () => {
                     <div className="text-center text-[10px] text-slate-500 font-medium">
                       Estadio: {esLocal ? equipoUsuario.estadio : rivalHoy.estadio} · Capacidad: {(esLocal ? equipoUsuario.capacidadEstadio : rivalHoy.capacidadEstadio).toLocaleString()} espectadores
                     </div>
+
+                    {!tieneOnceCompleto && (
+                      <div className="mt-3.5 p-3 bg-rose-500/10 border border-rose-500/20 text-rose-350 text-[11px] rounded-xl text-left leading-normal flex items-start gap-2 animate-pulse">
+                        <span className="text-sm">⚠️</span>
+                        <span>
+                          <strong>Alineación Incompleta:</strong> Tu once titular no está completo. Debes tener exactamente 11 jugadores designados como titulares en tu <strong>Pizarra Táctica</strong> para poder disputar este partido.
+                        </span>
+                      </div>
+                    )}
                   </div>
                 ) : esFinDeTemporada ? (
                   <div className="mt-4 p-5 bg-amber-950/20 border border-amber-500/30 rounded-xl space-y-3">
@@ -495,16 +506,22 @@ export const DashboardView: React.FC = () => {
                   >
                     🏆 Finalizar Temporada
                   </button>
+
                 ) : partidoCopaHoy ? (
                   <button
                     onClick={avanzarDia}
+                    disabled={!tieneOnceCompleto}
                     className={`w-full sm:w-auto px-8 py-4 bg-gradient-to-r ${
-                      tipoCopaHoy === 'champions' 
-                        ? 'from-indigo-600 via-purple-600 to-indigo-700 hover:from-indigo-500 hover:to-purple-500 shadow-indigo-500/30 border-indigo-500/20' 
-                        : 'from-blue-600 via-cyan-600 to-blue-700 hover:from-blue-500 hover:to-cyan-500 shadow-blue-500/30 border-blue-500/20'
-                    } text-white font-extrabold text-sm uppercase tracking-widest rounded-xl shadow-lg active:scale-[0.98] transform transition-all duration-200 animate-pulse border`}
+                      !tieneOnceCompleto
+                        ? 'from-slate-700 to-slate-800 border-slate-650 text-slate-500 cursor-not-allowed shadow-none'
+                        : tipoCopaHoy === 'champions' 
+                          ? 'from-indigo-600 via-purple-600 to-indigo-700 hover:from-indigo-500 hover:to-purple-500 shadow-indigo-500/30 border-indigo-500/20' 
+                          : 'from-blue-600 via-cyan-600 to-blue-700 hover:from-blue-500 hover:to-cyan-500 shadow-blue-500/30 border-blue-500/20'
+                    } text-white font-extrabold text-sm uppercase tracking-widest rounded-xl shadow-lg active:scale-[0.98] transform transition-all duration-200 border ${tieneOnceCompleto ? 'animate-pulse' : ''}`}
                   >
-                    🏆 Jugar {tipoCopaHoy === 'champions' ? 'Copa de Campeones' : 'Copa Continental'}
+                    {tieneOnceCompleto 
+                      ? `🏆 Jugar ${tipoCopaHoy === 'champions' ? 'Copa de Campeones' : 'Copa Continental'}` 
+                      : '⚠️ Once Incompleto (Pizarra Táctica)'}
                   </button>
                 ) : esDiaDeCopa ? (
                   <button
@@ -516,9 +533,16 @@ export const DashboardView: React.FC = () => {
                 ) : jornadaHoy ? (
                   <button
                     onClick={avanzarDia}
-                    className="w-full sm:w-auto px-8 py-4 bg-gradient-to-r from-teal-500 via-teal-600 to-emerald-600 hover:from-teal-400 hover:to-emerald-500 text-white font-extrabold text-sm uppercase tracking-widest rounded-xl shadow-lg shadow-teal-500/20 active:scale-[0.98] transform transition-all duration-200 animate-pulse"
+                    disabled={partidoUsuarioHoy ? !tieneOnceCompleto : false}
+                    className={`w-full sm:w-auto px-8 py-4 bg-gradient-to-r ${
+                      partidoUsuarioHoy && !tieneOnceCompleto
+                        ? 'from-slate-700 to-slate-800 border-slate-655 text-slate-500 cursor-not-allowed shadow-none'
+                        : 'from-teal-500 via-teal-600 to-emerald-600 hover:from-teal-400 hover:to-emerald-500 shadow-teal-500/20 active:scale-[0.98] transform transition-all duration-200 animate-pulse'
+                    } text-white font-extrabold text-sm uppercase tracking-widest rounded-xl shadow-lg border border-transparent`}
                   >
-                    ⚔️ Jugar Jornada {jornadaHoy.numero}
+                    {partidoUsuarioHoy && !tieneOnceCompleto 
+                      ? '⚠️ Once Incompleto (Pizarra Táctica)' 
+                      : `⚔️ Jugar Jornada ${jornadaHoy.numero}`}
                   </button>
                 ) : (
                   <button

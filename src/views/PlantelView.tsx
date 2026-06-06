@@ -179,6 +179,11 @@ export const PlantelView: React.FC = () => {
                           </div>
                           <div className="text-[10px] text-slate-500 flex items-center flex-wrap gap-x-1.5 gap-y-0.5">
                             <span>{jugador.nacionalidad}</span>
+                            {jugador.crianzaEstilistica && (
+                              <span className="px-1 py-0.2 rounded bg-slate-800 text-slate-400 border border-slate-750 text-[8px] font-mono">
+                                {jugador.crianzaEstilistica}
+                              </span>
+                            )}
                             <span>•</span>
                             <span className={`text-[9px] font-bold ${jugador.personalidad === 'Líder' ? 'text-cyan-400' :
                                 jugador.personalidad === 'Ambicioso' ? 'text-amber-400' :
@@ -366,8 +371,18 @@ export const PlantelView: React.FC = () => {
                     <h3 className="text-xl font-extrabold text-white mt-2 tracking-tight leading-tight">
                       {jugadorSeleccionado.nombre}
                     </h3>
-                    <p className="text-[10px] text-slate-500 font-medium">
-                      {jugadorSeleccionado.nacionalidad} · {jugadorSeleccionado.edad} años
+                    <p className="text-[10px] text-slate-500 font-medium flex items-center gap-1.5 mt-0.5 flex-wrap">
+                      <span>{jugadorSeleccionado.nacionalidad}</span>
+                      <span>·</span>
+                      <span>{jugadorSeleccionado.edad} años</span>
+                      {jugadorSeleccionado.crianzaEstilistica && (
+                        <>
+                          <span>·</span>
+                          <span className="px-1.5 py-0.5 rounded bg-teal-500/10 text-teal-400 border border-teal-500/20 text-[9px] font-mono font-bold">
+                            {jugadorSeleccionado.crianzaEstilistica}
+                          </span>
+                        </>
+                      )}
                     </p>
                   </div>
 
